@@ -1,0 +1,9 @@
+app:
+  name: murder-mystery-llm
+  environment: dev
+  host: 0.0.0.0
+  port: 8000
+
+llm:
+  provider: openai
+  model: gpt-4.1-mini

@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{ page_title }} · Murder Mystery LLM</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@300;400;600&family=Space+Grotesk:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/static/css/main.css" />
+  </head>
+  <body>
+    <div class="page {{ page_class|default('') }}">
+      <header class="site-header">
+        <a class="brand" href="/">
+          <span class="brand-mark"></span>
+          <span class="brand-text">Murder Mystery LLM</span>
+        </a>
+        <nav class="site-nav">
+          <a class="nav-link" href="/">Control Room</a>
+          <a class="nav-link" href="/game/demo">Game Room</a>
+          <a class="nav-link" href="/test">Prompt Test</a>
+        </nav>
+      </header>
+      <main class="content {{ content_class|default('') }}">
+        {% block content %}{% endblock %}
+      </main>
+      <footer class="site-footer">
+        <span>Simulations are logged under <code>runs/</code>.</span>
+        <span class="status-pill" id="status-pill">Offline</span>
+      </footer>
+    </div>
+    <script src="/static/js/app.js"></script>
+  </body>
+</html>

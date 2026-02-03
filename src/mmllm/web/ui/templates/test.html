@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <section class="hero compact">
+    <div class="hero-text">
+      <p class="eyebrow">Prompt Playground</p>
+      <h1>Prompt Test</h1>
+      <p class="lede">
+        Edit the system and user prompts, send them to your local Ollama instance,
+        and inspect the raw response to tune formatting.
+      </p>
+    </div>
+  </section>
+
+  <section class="panel test-panel">
+    <div class="panel-header">
+      <h2>Ollama Settings</h2>
+      <span class="panel-note">One-shot, non-streaming chat request.</span>
+    </div>
+    <div class="panel-body test-layout">
+      <div class="test-stack">
+        <label class="field">
+          <span class="field-label">Base URL</span>
+          <input class="input" id="test-base-url" value="http://127.0.0.1:11434" />
+        </label>
+        <label class="field">
+          <span class="field-label">Model</span>
+          <input class="input" id="test-model" value="llama3.1:8b" />
+        </label>
+        <label class="field">
+        <span class="field-label">Role</span>
+        <select class="input select" id="test-role">
+          <option value="town" selected>Town</option>
+          <option value="murderer">Murderer</option>
+          <option value="detective">Detective</option>
+        </select>
+      </label>
+        <label class="field">
+          <span class="field-label">System Prompt</span>
+          <textarea class="input textarea" id="test-system" rows="10"></textarea>
+        </label>
+        <label class="field">
+          <span class="field-label">User Prompt</span>
+          <textarea class="input textarea" id="test-user" rows="10"></textarea>
+        </label>
+        <div class="panel-footer">
+          <button class="btn primary" id="test-send">Send Prompt</button>
+        </div>
+      </div>
+      <details class="vars-panel" open>
+        <summary>Prompt Variables</summary>
+        <div class="vars-note">Defaults used by the playground placeholders.</div>
+        <div class="vars-grid">
+          <label class="field">
+            <span class="field-label"><code>{request_id}</code></span>
+            <input class="input vars-input" id="var-request_id" value="req_001" />
+          </label>
+          <label class="field">
+            <span class="field-label"><code>{game_id}</code></span>
+            <input class="input vars-input" id="var-game_id" value="game_001" />
+          </label>
+          <label class="field">
+            <span class="field-label"><code>{player_id}</code></span>
+            <input class="input vars-input" id="var-player_id" value="p1" />
+          </label>
+          <label class="field">
+            <span class="field-label"><code>{round_num}</code></span>
+            <input class="input vars-input" id="var-round_num" value="1" />
+          </label>
+          <label class="field">
+            <span class="field-label"><code>{phase}</code></span>
+            <input class="input vars-input" id="var-phase" value="day" />
+          </label>
+          <label class="field">
+            <span class="field-label"><code>{role}</code></span>
+            <input class="input vars-input" id="var-role" value="town" />
+          </label>
+          <label class="field">
+            <span class="field-label"><code>{ap_available}</code></span>
+            <input class="input vars-input" id="var-ap_available" value="3" />
+          </label>
+          <label class="field">
+            <span class="field-label"><code>{allowed_actions}</code></span>
+            <input class="input vars-input" id="var-allowed_actions" value="speak, question, poll, investigate, vote, pass" />
+          </label>
+          <label class="field">
+            <span class="field-label"><code>{action_request}</code></span>
+            <textarea class="input textarea vars-textarea" id="var-action_request" rows="4">{\"request_id\":\"req_001\",\"game_id\":\"game_001\",\"player_id\":\"p1\",\"round_num\":1,\"phase\":\"day\",\"allowed_actions\":[\"speak\",\"question\",\"poll\",\"investigate\",\"vote\"],\"ap_available\":3}</textarea>
+          </label>
+          <label class="field">
+            <span class="field-label"><code>{observation}</code></span>
+            <textarea class="input textarea vars-textarea" id="var-observation" rows="4">{\"game_id\":\"game_001\",\"player_id\":\"p1\",\"round_num\":1,\"phase\":\"day\",\"role\":\"town\"}</textarea>
+          </label>
+          <label class="field">
+            <span class="field-label"><code>{constraints}</code></span>
+            <textarea class="input textarea vars-textarea" id="var-constraints" rows="4">{\"max_sentences\":2,\"must_ask_question\":false,\"max_chars\":280}</textarea>
+          </label>
+        </div>
+      </details>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-header">
+      <h2>Response</h2>
+      <span class="panel-note">Model content + raw payload.</span>
+    </div>
+    <div class="panel-body test-output">
+      <div class="validation-panel">
+        <div class="validation-header">
+          <div class="panel-note">Response Validation</div>
+          <span class="status-pill" id="validation-status">Waiting</span>
+        </div>
+        <div class="validation-body" id="validation-body">Send a prompt to validate the response.</div>
+      </div>
+      <details class="collapsible" open>
+        <summary>Rendered Markdown</summary>
+        <div class="markdown-render" id="test-response">Awaiting response.</div>
+      </details>
+      <div>
+        <div class="panel-note">Markdown Text</div>
+        <pre class="code-block" id="test-markdown"></pre>
+      </div>
+      <details class="collapsible">
+        <summary>Raw JSON</summary>
+        <pre class="code-block" id="test-raw"></pre>
+      </details>
+    </div>
+  </section>
+
+  <script src="/static/js/test.js"></script>
+{% endblock %}

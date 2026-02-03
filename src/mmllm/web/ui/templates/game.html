@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <section class="game-layout">
+    <aside class="panel players-panel">
+      <div class="panel-header">
+        <h2>Players</h2>
+        <span class="panel-note" id="turn-indicator">Awaiting turn</span>
+      </div>
+      <div class="panel-body" id="players-list">
+        <div class="empty-state">Players will appear here.</div>
+      </div>
+    </aside>
+    <div class="panel main-panel">
+      <div class="hero-text">
+        <div class="hero-header">
+          <p class="eyebrow">Live Game Room</p>
+          <div class="phase-pill compact" id="phase-card">
+            <span class="phase-icon" id="phase-icon">☀</span>
+            <strong class="stat-value" id="phase">1</strong>
+          </div>
+        </div>
+        <h1>{{ game_id }}</h1>
+        <p class="lede">
+          This page is wired for WebSocket updates. Once the engine emits events,
+          the timeline and transcript below can update in real time.
+        </p>
+        <div class="hero-actions">
+          <a class="btn ghost" href="/">Back to Control Room</a>
+          <button class="btn primary" id="run-round">Run Action</button>
+          <button class="btn secondary" id="refresh-game">Refresh Snapshot</button>
+        </div>
+      </div>
+      <div class="hero-panel">
+        <div class="stat-card">
+          <span class="stat-label">Alive</span>
+          <strong class="stat-value" id="alive-count">8</strong>
+          <span class="stat-meta">Players remaining</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">Events</span>
+          <strong class="stat-value" id="event-count">0</strong>
+          <span class="stat-meta">Synced</span>
+        </div>
+      </div>
+    </div>
+    <div class="panel accent chat-panel">
+      <div class="panel-header">
+        <h2>Chat Window</h2>
+        <span class="panel-note">Public-facing story beats.</span>
+      </div>
+      <div class="panel-body transcript" id="transcript">
+        <div class="empty-state">Transcript will appear here.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel timeline-panel">
+    <div class="panel-header">
+      <div>
+        <h2>Event Timeline</h2>
+        <span class="panel-note">Event symbols (click for details).</span>
+      </div>
+      <div class="timeline-controls">
+        <button class="btn ghost" id="event-prev">Prev</button>
+        <button class="btn ghost" id="event-next">Next</button>
+        <button class="btn secondary" id="event-show-all">Show All</button>
+        <button class="btn primary" id="event-rewind">Rewind Here</button>
+      </div>
+    </div>
+    <div class="panel-body timeline" id="timeline">
+      <div class="empty-state">No events yet. Start the engine to see activity.</div>
+    </div>
+    <div class="panel-body last-action" id="last-action">
+      <div class="panel-note">Last Action</div>
+      <div class="last-action-body" id="last-action-body">No actions yet.</div>
+    </div>
+    <div class="panel-body timeline-detail" id="timeline-detail">
+      <div class="empty-state">Select an event to see details.</div>
+    </div>
+  </section>
+{% endblock %}

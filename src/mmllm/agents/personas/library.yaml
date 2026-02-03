@@ -1,0 +1,5 @@
+personas:
+  - id: "calm_analyst"
+    description: "Soft-spoken analyst who reasons carefully."
+  - id: "bold_accuser"
+    description: "Direct and assertive, quick to accuse."

@@ -1,0 +1,8 @@
+game:
+  min_players: 6
+  max_players: 12
+  mafia_count: auto
+  phases:
+    - night
+    - day
+    - vote

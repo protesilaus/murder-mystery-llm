@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <section class="hero">
+    <div class="hero-text">
+      <p class="eyebrow">Live Operations</p>
+      <h1>Control Room</h1>
+      <p class="lede">
+        Spin up new games, watch the transcript, and export training data. This UI
+        is server-rendered with Jinja, so you can iterate fast without a frontend
+        rebuild.
+      </p>
+      <div class="hero-actions">
+        <button class="btn primary" id="create-game">Start New Game</button>
+        <select class="input select" id="agent-type">
+          <option value="ollama" selected>Ollama</option>
+          <option value="scripted">Scripted</option>
+        </select>
+        <a class="btn ghost" href="/game/demo">View Demo Room</a>
+      </div>
+      <div class="status-row">
+        <span id="status-line">Waiting for server status...</span>
+        <span id="last-updated">Last update: --</span>
+      </div>
+    </div>
+    <div class="hero-panel">
+      <div class="stat-card">
+        <span class="stat-label">Active Games</span>
+        <strong class="stat-value" id="active-count">0</strong>
+        <span class="stat-meta">Tracking local sessions</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">Last Run</span>
+        <strong class="stat-value">run_2026-02-02_001</strong>
+        <span class="stat-meta">Export ready</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">Logging</span>
+        <strong class="stat-value">JSONL</strong>
+        <span class="stat-meta">Append-only, replayable</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="grid">
+    <div class="panel">
+      <div class="panel-header">
+        <h2>Game Sessions</h2>
+        <span class="panel-note">Auto-refreshing from <code>/games</code>.</span>
+      </div>
+      <div class="panel-body" id="games-list">
+        <div class="empty-state">No games yet. Start one to see it here.</div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-header">
+        <h2>Party Builder</h2>
+        <span class="panel-note">Configure display names and scores.</span>
+      </div>
+      <div class="panel-body party-panel">
+        <div class="party-list" id="party-list">
+          <div class="empty-state">Loading party roster...</div>
+        </div>
+        <div class="panel-footer party-actions">
+          <button class="btn secondary" id="party-generate">Generate Names</button>
+          <button class="btn primary" id="party-save">Save Party</button>
+        </div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-header">
+        <h2>Ollama Connectivity</h2>
+        <span class="panel-note">One-shot ping to local LLM.</span>
+      </div>
+      <div class="panel-body">
+        <label class="field">
+          <span class="field-label">Base URL</span>
+          <input class="input" id="ollama-base-url" value="http://127.0.0.1:11434" />
+        </label>
+        <label class="field">
+          <span class="field-label">Model</span>
+          <input class="input" id="ollama-model" value="llama3.1:8b" />
+        </label>
+        <label class="field">
+          <span class="field-label">Prompt</span>
+          <textarea class="input textarea" id="ollama-prompt" rows="3">Say hello in one sentence.</textarea>
+        </label>
+        <div class="panel-footer">
+          <button class="btn secondary" id="ollama-test">Test Ollama</button>
+        </div>
+        <div class="empty-state" id="ollama-response">Awaiting response.</div>
+      </div>
+    </div>
+    <div class="panel accent">
+      <div class="panel-header">
+        <h2>Next Actions</h2>
+        <span class="panel-note">Recommended build steps.</span>
+      </div>
+      <div class="panel-body">
+        <ol class="checklist">
+          <li>Define the first <code>GameState</code> schema.</li>
+          <li>Wire the event log to append on every state transition.</li>
+          <li>Stream events over WebSockets to this dashboard.</li>
+        </ol>
+        <div class="panel-footer">
+          <a class="btn secondary" href="/game/demo">Open Live Room</a>
+        </div>
+      </div>
+    </div>
+  </section>
+{% endblock %}
