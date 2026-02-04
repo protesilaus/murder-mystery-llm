@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Literal, Optional, Union
 
@@ -51,6 +52,15 @@ class EventType(str, Enum):
     round_summary = "round_summary"
     memory_updated = "memory_updated"
     game_ended = "game_ended"
+
+
+class ExecutionStatus(str, Enum):
+    """Current execution state of the game loop."""
+    idle = "idle"
+    querying_llm = "querying_llm"
+    waiting_response = "waiting_response"
+    applying_action = "applying_action"
+    phase_transition = "phase_transition"
 
 
 # ----------------------------
@@ -156,6 +166,15 @@ class PublicState(IdModel):
     @classmethod
     def _v_votes(cls, v: Dict[str, str]) -> Dict[str, str]:
         return {cls._lower_id(k): cls._lower_id(val) for k, val in v.items()}
+
+
+class GameStatus(IdModel):
+    """Current execution status for real-time UI updates."""
+    status: ExecutionStatus = ExecutionStatus.idle
+    current_actor: Optional[str] = None
+    action_description: Optional[str] = None  # Human-readable status message
+    request_id: Optional[str] = None  # Link to stored LLM prompt
+    timestamp: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
 
 class Visibility(IdModel):
@@ -292,7 +311,7 @@ class ActionRequest(IdModel):
 
 
 class ActionBase(IdModel):
-    action_type: ActionType
+    type: ActionType
     reasoning_private: Optional[str] = Field(
         default=None,
         description="Never shown publicly; stored for analysis/training.",
@@ -300,12 +319,12 @@ class ActionBase(IdModel):
 
 
 class SpeakAction(ActionBase):
-    action_type: Literal[ActionType.speak] = ActionType.speak
+    type: Literal[ActionType.speak] = ActionType.speak
     body: str
 
 
 class QuestionAction(ActionBase):
-    action_type: Literal[ActionType.question] = ActionType.question
+    type: Literal[ActionType.question] = ActionType.question
     to_player_id: str
     body: str
 
@@ -316,12 +335,12 @@ class QuestionAction(ActionBase):
 
 
 class PollAction(ActionBase):
-    action_type: Literal[ActionType.poll] = ActionType.poll
+    type: Literal[ActionType.poll] = ActionType.poll
     body: str
 
 
 class InvestigateAction(ActionBase):
-    action_type: Literal[ActionType.investigate] = ActionType.investigate
+    type: Literal[ActionType.investigate] = ActionType.investigate
     target_player_id: str
 
     @field_validator("target_player_id")
@@ -331,7 +350,7 @@ class InvestigateAction(ActionBase):
 
 
 class WhisperSendAction(ActionBase):
-    action_type: Literal[ActionType.whisper_send] = ActionType.whisper_send
+    type: Literal[ActionType.whisper_send] = ActionType.whisper_send
     to_player_id: str
     body: str
 
@@ -342,7 +361,7 @@ class WhisperSendAction(ActionBase):
 
 
 class WhisperReplyAction(ActionBase):
-    action_type: Literal[ActionType.whisper_reply] = ActionType.whisper_reply
+    type: Literal[ActionType.whisper_reply] = ActionType.whisper_reply
     to_player_id: str
     body: str
 
@@ -353,7 +372,7 @@ class WhisperReplyAction(ActionBase):
 
 
 class VoteAction(ActionBase):
-    action_type: Literal[ActionType.vote] = ActionType.vote
+    type: Literal[ActionType.vote] = ActionType.vote
     target_player_id: str
 
     @field_validator("target_player_id")
@@ -363,7 +382,7 @@ class VoteAction(ActionBase):
 
 
 class KillAction(ActionBase):
-    action_type: Literal[ActionType.kill] = ActionType.kill
+    type: Literal[ActionType.kill] = ActionType.kill
     target_player_id: str
 
     @field_validator("target_player_id")
@@ -373,7 +392,7 @@ class KillAction(ActionBase):
 
 
 class PassAction(ActionBase):
-    action_type: Literal[ActionType.pass_turn] = ActionType.pass_turn
+    type: Literal[ActionType.pass_turn] = ActionType.pass_turn
     note: Optional[str] = None
 
 

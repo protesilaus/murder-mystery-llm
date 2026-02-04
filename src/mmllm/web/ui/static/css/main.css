@@ -54,7 +54,7 @@ code {
 .page {
   position: relative;
   z-index: 1;
-  max-width: 1200px;
+  max-width: 1760px;
   margin: 0 auto;
   padding: 2.5rem 2.5rem 3rem;
   display: flex;
@@ -64,7 +64,7 @@ code {
 }
 
 .page.game-page {
-  max-width: 1500px;
+  max-width: 1840px;
   padding: 2rem 2.5rem 2rem;
   gap: 1.5rem;
 }
@@ -260,34 +260,47 @@ code {
 
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
   gap: 1.5rem;
+}
+
+.grid.two-col {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+@media (max-width: 1000px) {
+  .grid.two-col {
+    grid-template-columns: 1fr;
+  }
 }
 
 .game-layout {
   display: grid;
-  grid-template-columns: minmax(220px, 260px) minmax(320px, 1fr) minmax(320px, 1fr);
+  grid-template-columns: minmax(300px, 380px) minmax(360px, 1fr) minmax(360px, 520px);
   gap: 1.5rem;
   align-items: stretch;
   flex: 1;
   min-height: 0;
+  max-height: calc(100vh - 8rem);
 }
 
 .game-layout > .panel {
   min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .players-panel {
-  position: sticky;
-  top: 1.5rem;
-  align-self: start;
-  height: fit-content;
+  max-height: calc(100vh - 8rem);
 }
 
 .main-panel {
-  display: grid;
-  gap: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
   position: relative;
+  overflow-y: auto;
+  max-height: calc(100vh - 8rem);
 }
 
 .hero-header {
@@ -313,8 +326,65 @@ code {
   font-size: 0.95rem;
 }
 
+.game-header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.game-header-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.game-title {
+  font-family: "Space Grotesk", "Trebuchet MS", sans-serif;
+  font-size: 1.8rem;
+  margin: 0.2rem 0 0;
+}
+
+.game-stats {
+  display: flex;
+  gap: 1.5rem;
+  padding: 0.6rem 0;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+.stat-inline {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.9rem;
+}
+
+.stat-inline .stat-label {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.stat-inline strong {
+  font-family: "Space Grotesk", "Trebuchet MS", sans-serif;
+  font-size: 1.1rem;
+  color: var(--ink);
+}
+
+.game-actions {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.compact-btn {
+  padding: 0.5rem 1rem;
+  font-size: 0.9rem;
+}
+
 .chat-panel {
   min-height: 0;
+  height: 68vh;
   display: flex;
   flex-direction: column;
 }
@@ -342,11 +412,24 @@ code {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 0.75rem;
-  padding: 0.7rem 0.9rem;
-  border-radius: 14px;
+  gap: 0.5rem;
+  padding: 0.5rem 0.7rem;
+  border-radius: 12px;
   border: 1px solid var(--border);
   background: rgba(18, 24, 33, 0.75);
+}
+
+.player-card .btn {
+  padding: 0.35rem 0.5rem;
+  font-size: 1.1rem;
+  min-width: auto;
+  border: none;
+  background: transparent;
+}
+
+.player-card .btn:hover {
+  background: rgba(18, 24, 33, 0.9);
+  transform: none;
 }
 
 .player-left {
@@ -635,6 +718,10 @@ code {
   display: grid;
   gap: 0.8rem;
   font-size: 1rem;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+  padding-right: 0.4rem;
 }
 
 .field {
@@ -667,21 +754,26 @@ code {
 }
 
 .party-panel {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 1rem;
+  min-height: 0;
 }
 
 .party-list {
   display: grid;
   gap: 0.8rem;
+  overflow-y: auto;
+  max-height: 440px;
+  padding-right: 0.4rem;
 }
 
 .party-row {
   display: grid;
-  grid-template-columns: minmax(70px, 90px) minmax(0, 1fr) minmax(0, 1fr) minmax(80px, 110px);
-  gap: 0.6rem;
-  align-items: center;
-  padding: 0.6rem 0.75rem;
+  grid-template-columns: minmax(65px, 80px) 1fr 1fr minmax(70px, 90px);
+  gap: 0.5rem;
+  align-items: start;
+  padding: 0.7rem 0.8rem;
   border-radius: 14px;
   border: 1px solid var(--border);
   background: rgba(18, 24, 33, 0.6);
@@ -693,25 +785,52 @@ code {
 
 .party-row .field {
   min-width: 0;
+  gap: 0.25rem;
 }
 
 .party-row .input {
   min-width: 0;
   max-width: 100%;
+  padding: 0.5rem 0.7rem;
+  font-size: 0.9rem;
 }
 
 .party-row .field-label {
-  font-size: 0.75rem;
+  font-size: 0.7rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.party-row > div:first-child {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.party-row > div:first-child strong {
+  font-size: 0.85rem;
+  font-family: "Space Grotesk", "Trebuchet MS", sans-serif;
+  word-break: break-word;
+}
+
+@media (max-width: 700px) {
+  .party-row {
+    grid-template-columns: 1fr;
+    gap: 0.6rem;
+  }
 }
 
 .party-actions {
   display: flex;
   gap: 0.6rem;
   flex-wrap: wrap;
+  margin-top: auto;
 }
 
 .party-actions .btn {
-  min-width: 140px;
+  flex: 1;
+  min-width: 120px;
 }
 .checklist {
   margin: 0;
@@ -746,17 +865,21 @@ code {
   color: var(--muted);
 }
 
-.timeline,
-.transcript {
+.timeline {
   max-height: 360px;
   overflow-y: auto;
   padding-right: 0.4rem;
 }
 
+.transcript {
+  overflow-y: auto;
+  padding-right: 0.4rem;
+}
+
 .chat-panel .transcript {
-  max-height: none;
   flex: 1;
   min-height: 0;
+  overflow-y: auto;
 }
 
 .game-content .timeline {
@@ -799,6 +922,53 @@ code {
   place-items: center;
   font-size: 1.25rem;
   cursor: pointer;
+  position: relative;
+}
+
+.timeline-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  background: var(--accent);
+  color: white;
+  font-size: 0.7rem;
+  font-weight: bold;
+  padding: 0.15rem 0.35rem;
+  border-radius: 999px;
+  min-width: 18px;
+  text-align: center;
+}
+
+.timeline-phase-header {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 0.8rem;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: rgba(18, 24, 33, 0.85);
+  font-size: 0.9rem;
+  cursor: pointer;
+  font-family: "Space Grotesk", "Trebuchet MS", sans-serif;
+  transition: all 0.2s ease;
+}
+
+.timeline-phase-header:hover {
+  background: rgba(18, 24, 33, 0.95);
+  border-color: rgba(238, 241, 246, 0.2);
+}
+
+.phase-toggle {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.phase-count {
+  font-size: 0.75rem;
+  color: var(--muted);
+  background: rgba(18, 24, 33, 0.9);
+  padding: 0.15rem 0.4rem;
+  border-radius: 999px;
 }
 
 .timeline-detail {
@@ -855,6 +1025,146 @@ code {
   color: #ffe5e5;
 }
 
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(6, 8, 12, 0.72);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  z-index: 1200;
+  backdrop-filter: blur(6px);
+}
+
+.modal-overlay.active {
+  display: flex;
+}
+
+.modal-content {
+  width: min(980px, 95vw);
+  max-height: min(80vh, 900px);
+  background: rgba(18, 24, 33, 0.95);
+  border-radius: 22px;
+  border: 1px solid var(--border);
+  box-shadow: 0 28px 60px rgba(2, 6, 12, 0.65);
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  overflow: hidden;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.25rem 1.5rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.modal-header h2 {
+  margin: 0;
+  font-family: "Space Grotesk", "Trebuchet MS", sans-serif;
+}
+
+.modal-close {
+  background: rgba(18, 24, 33, 0.85);
+  border: 1px solid var(--border);
+  color: var(--ink);
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  font-size: 1.2rem;
+  cursor: pointer;
+}
+
+.modal-body {
+  padding: 1rem 1.5rem 1.5rem;
+  overflow: auto;
+}
+
+.modal-footer {
+  padding: 0.75rem 1.5rem 1.25rem;
+  border-top: 1px solid var(--border);
+  display: flex;
+  justify-content: flex-end;
+}
+
+.agent-details {
+  display: grid;
+  gap: 1rem;
+}
+
+.agent-section h3 {
+  margin: 0 0 0.6rem;
+  font-family: "Space Grotesk", "Trebuchet MS", sans-serif;
+  font-size: 1rem;
+}
+
+.agent-info-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.75rem;
+}
+
+.agent-info-item {
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: rgba(18, 24, 33, 0.7);
+  padding: 0.6rem 0.75rem;
+}
+
+.agent-info-label {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.agent-knowledge {
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: rgba(18, 24, 33, 0.7);
+  padding: 0.8rem 1rem;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.chat-interface {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.chat-messages {
+  min-height: 180px;
+  max-height: 280px;
+  overflow-y: auto;
+  padding: 0.75rem;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: rgba(12, 16, 24, 0.85);
+  display: grid;
+  gap: 0.6rem;
+}
+
+.chat-message {
+  padding: 0.5rem 0.7rem;
+  border-radius: 12px;
+  background: rgba(18, 24, 33, 0.7);
+  color: var(--ink);
+}
+
+.chat-message.user {
+  background: rgba(212, 74, 74, 0.18);
+  border: 1px solid rgba(212, 74, 74, 0.35);
+}
+
+.chat-input-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.6rem;
+  align-items: center;
+}
+
 @media (max-width: 900px) {
   .page {
     padding: 2rem 1.5rem 2.5rem;
@@ -898,6 +1208,17 @@ code {
   }
 }
 
+@media (min-width: 1400px) {
+  .page {
+    padding-left: 3rem;
+    padding-right: 3rem;
+  }
+
+  .party-list {
+    max-height: 560px;
+  }
+}
+
 @media (max-width: 600px) {
   .hero-actions {
     flex-direction: column;
@@ -930,4 +1251,296 @@ code {
     opacity: 1;
     transform: translateY(0);
   }
+}
+
+/* Live Game Room - New Layout */
+.alive-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.3rem 0.8rem;
+  border-radius: 999px;
+  background: rgba(86, 196, 133, 0.15);
+  border: 1px solid rgba(86, 196, 133, 0.4);
+  color: #b7f1d1;
+  font-size: 0.9rem;
+  font-family: "Space Grotesk", "Trebuchet MS", sans-serif;
+  font-weight: 500;
+  margin-left: 0.75rem;
+}
+
+.phase-info-compact {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.event-badge {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  background: rgba(18, 24, 33, 0.85);
+  border: 1px solid var(--border);
+  font-size: 0.85rem;
+  font-family: "Space Grotesk", "Trebuchet MS", sans-serif;
+}
+
+.event-icon {
+  font-size: 0.75rem;
+}
+
+.current-turn-info {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 0;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  font-size: 0.95rem;
+}
+
+.current-turn-info .stat-label {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.current-turn-info strong {
+  font-family: "Space Grotesk", "Trebuchet MS", sans-serif;
+  font-size: 1rem;
+  color: var(--ink);
+}
+
+.ai-interaction-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 1rem;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: rgba(18, 24, 33, 0.5);
+  margin-top: 0.5rem;
+}
+
+.ai-chat-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.ai-chat-header h3 {
+  margin: 0;
+  font-family: "Space Grotesk", "Trebuchet MS", sans-serif;
+  font-size: 1rem;
+  color: var(--ink);
+}
+
+.ai-chat-messages {
+  max-height: 120px;
+  overflow-y: auto;
+  padding: 0.6rem;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: rgba(12, 16, 24, 0.7);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.ai-chat-input-row {
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+}
+
+.ai-chat-input-row .input {
+  flex: 1;
+  padding: 0.55rem 0.8rem;
+  font-size: 0.9rem;
+}
+
+.ai-action-control {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 1rem;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: rgba(18, 24, 33, 0.5);
+  margin-top: 0.5rem;
+}
+
+.ai-action-control h3 {
+  margin: 0;
+  font-family: "Space Grotesk", "Trebuchet MS", sans-serif;
+  font-size: 1rem;
+  color: var(--ink);
+}
+
+.action-control-row {
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+}
+
+.action-control-row .select {
+  flex: 1;
+  padding: 0.55rem 0.8rem;
+  font-size: 0.9rem;
+}
+
+.game-actions-bottom {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
+}
+
+.game-actions-bottom .btn.primary {
+  flex: 1;
+  min-width: 140px;
+}
+
+.game-actions-bottom .btn.action-btn {
+  font-size: 1.5rem;
+  padding: 0.5rem 1.5rem;
+}
+
+.narrator-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 1rem;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: rgba(240, 179, 90, 0.1);
+  margin-top: 0.5rem;
+}
+
+.narrator-section .ai-chat-header h3 {
+  color: var(--accent-2);
+}
+
+/* Game Execution Status Display */
+.game-status-section {
+  padding: 0.75rem 1rem;
+  background: var(--surface-1);
+  border-radius: 8px;
+  margin-top: 0.5rem;
+  border: 1px solid var(--surface-2);
+}
+
+.status-message {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.95rem;
+}
+
+.status-icon {
+  font-size: 1.2rem;
+}
+
+.status-text {
+  font-weight: 500;
+  color: var(--text-1);
+}
+
+.status-message.querying .status-text {
+  color: var(--accent-primary);
+}
+
+.status-message.waiting .status-text {
+  color: #f59e0b;
+}
+
+.status-message.applying .status-text {
+  color: #10b981;
+}
+
+.status-details {
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--surface-2);
+}
+
+.prompt-link {
+  font-size: 0.85rem;
+  color: var(--accent-primary);
+  text-decoration: none;
+}
+
+.prompt-link:hover {
+  text-decoration: underline;
+}
+
+/* Prompt Modal */
+.prompt-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.prompt-modal-overlay .modal-content.large {
+  max-width: 900px;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.prompt-message {
+  margin-bottom: 1rem;
+  padding: 0.75rem;
+  background: var(--surface-2);
+  border-radius: 6px;
+}
+
+.prompt-message strong {
+  display: block;
+  margin-bottom: 0.5rem;
+  color: var(--accent-primary);
+  text-transform: uppercase;
+  font-size: 0.85rem;
+}
+
+.prompt-message pre {
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  font-family: 'Courier New', monospace;
+  font-size: 0.9rem;
+  margin: 0;
+}
+
+.prompt-metadata {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  padding: 0.75rem;
+  background: var(--surface-1);
+  border-radius: 6px;
+}
+
+.prompt-metadata p {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.prompt-response {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 2px solid var(--surface-2);
+}
+
+.prompt-response h3 {
+  margin-bottom: 0.5rem;
 }

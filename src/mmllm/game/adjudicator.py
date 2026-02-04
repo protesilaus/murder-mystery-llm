@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from typing import List
 from uuid import uuid4
 
+from mmllm.core.game_config import GameTypeConfig
 from mmllm.core.types import (
     ActionResponse,
     ActionType,
@@ -27,7 +28,11 @@ def _event_id(prefix: str) -> str:
     return f"{prefix}_{uuid4().hex[:8]}"
 
 
-def _action_cost(action_type: ActionType) -> int:
+def _action_cost(action_type: ActionType, config: GameTypeConfig | None = None) -> int:
+    """Get the AP cost for an action from config or defaults."""
+    if config is not None:
+        return config.get_action_cost(action_type.value)
+    # Fallback defaults for backward compatibility
     if action_type in (ActionType.question, ActionType.poll):
         return 2
     if action_type in (ActionType.speak, ActionType.whisper_send, ActionType.whisper_reply):
@@ -44,20 +49,20 @@ def apply_action(runtime: GameRuntime, response: ActionResponse) -> List[GameEve
         raise ValueError("action phase does not match runtime")
 
     allowed = legal_actions(runtime, response.player_id)
-    if response.action.action_type not in allowed:
+    if response.action.type not in allowed:
         raise ValueError("action not allowed")
 
     events: List[GameEvent] = []
     action = response.action
 
-    if runtime.public_state.phase == Phase.day and action.action_type != ActionType.pass_turn:
+    if runtime.public_state.phase == Phase.day and action.type != ActionType.pass_turn:
         if runtime.free_reply_player_id != response.player_id:
             player = runtime.get_player(response.player_id)
             if player:
-                cost = _action_cost(action.action_type)
+                cost = _action_cost(action.type, runtime.game_config)
                 player.social_ap = max(0, player.social_ap - cost)
 
-    if action.action_type == ActionType.speak:
+    if action.type == ActionType.speak:
         entry = TranscriptEntry(
             entry_id=_event_id("entry"),
             round_num=runtime.public_state.round_num,
@@ -79,7 +84,7 @@ def apply_action(runtime: GameRuntime, response: ActionResponse) -> List[GameEve
                 payload={"body": action.body},
             )
         )
-    elif action.action_type == ActionType.question:
+    elif action.type == ActionType.question:
         target = runtime.get_player(action.to_player_id)
         if target is None or not target.alive:
             raise ValueError("invalid question target")
@@ -111,7 +116,7 @@ def apply_action(runtime: GameRuntime, response: ActionResponse) -> List[GameEve
                 },
             )
         )
-    elif action.action_type == ActionType.poll:
+    elif action.type == ActionType.poll:
         entry = TranscriptEntry(
             entry_id=_event_id("entry"),
             round_num=runtime.public_state.round_num,
@@ -136,14 +141,20 @@ def apply_action(runtime: GameRuntime, response: ActionResponse) -> List[GameEve
                 },
             )
         )
-    elif action.action_type == ActionType.investigate:
+    elif action.type == ActionType.investigate:
         target = runtime.get_player(action.target_player_id)
         if target is None or not target.alive:
             raise ValueError("invalid investigate target")
         role = runtime.roles.get(action.target_player_id, None)
+        # Get investigation delay from config
+        config = runtime.game_config or GameTypeConfig.default_classic()
+        investigator_role = runtime.roles.get(response.player_id)
+        reveal_delay = config.get_investigation_delay(
+            investigator_role.value if investigator_role else "detective"
+        )
         runtime.pending_reveals.append(
             {
-                "round_due": runtime.public_state.round_num + 2,
+                "round_due": runtime.public_state.round_num + reveal_delay,
                 "target_player_id": action.target_player_id,
                 "role": role.value if role else "unknown",
             }
@@ -176,7 +187,7 @@ def apply_action(runtime: GameRuntime, response: ActionResponse) -> List[GameEve
                 },
             )
         )
-    elif action.action_type in (ActionType.whisper_send, ActionType.whisper_reply):
+    elif action.type in (ActionType.whisper_send, ActionType.whisper_reply):
         entry = TranscriptEntry(
             entry_id=_event_id("entry"),
             round_num=runtime.public_state.round_num,
@@ -204,7 +215,7 @@ def apply_action(runtime: GameRuntime, response: ActionResponse) -> List[GameEve
                 payload={"body": action.body, "to": action.to_player_id},
             )
         )
-    elif action.action_type == ActionType.vote:
+    elif action.type == ActionType.vote:
         runtime.public_state.current_votes[response.player_id] = action.target_player_id
         events.append(
             GameEvent(
@@ -218,7 +229,7 @@ def apply_action(runtime: GameRuntime, response: ActionResponse) -> List[GameEve
                 payload={"target": action.target_player_id},
             )
         )
-    elif action.action_type == ActionType.kill:
+    elif action.type == ActionType.kill:
         target = runtime.get_player(action.target_player_id)
         if target is None or not target.alive:
             raise ValueError("invalid kill target")
@@ -249,7 +260,7 @@ def apply_action(runtime: GameRuntime, response: ActionResponse) -> List[GameEve
                 payload={"player_id": action.target_player_id},
             )
         )
-    elif action.action_type == ActionType.pass_turn:
+    elif action.type == ActionType.pass_turn:
         events.append(
             GameEvent(
                 event_id=_event_id("evt"),

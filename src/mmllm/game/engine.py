@@ -8,9 +8,11 @@ from typing import Iterable, List
 from uuid import uuid4
 
 from mmllm.core.clock import PhaseClock
+from mmllm.core.game_config import GameTypeConfig
 from mmllm.core.types import (
     ActionResponse,
     AgentObservation,
+    Controls,
     EventType,
     GameEvent,
     Phase,
@@ -42,9 +44,20 @@ class GameEngine:
         player_ids: Iterable[str],
         *,
         murderer_id: str | None = None,
-        actions_per_player: int = 3,
+        actions_per_player: int | None = None,
         phases: Iterable[Phase] | None = None,
+        game_config: GameTypeConfig | None = None,
     ) -> None:
+        # Use provided config or default to classic
+        self.game_config = game_config or GameTypeConfig.default_classic()
+
+        # Get settings from config, with parameter overrides for backwards compatibility
+        effective_actions_per_player = (
+            actions_per_player
+            if actions_per_player is not None
+            else self.game_config.player_settings.actions_per_player
+        )
+
         ids = [pid.strip().lower() for pid in player_ids]
         if not ids:
             raise ValueError("player_ids must be non-empty")
@@ -55,14 +68,26 @@ class GameEngine:
 
         detective = next((pid for pid in ids if pid != murderer), None)
 
-        players = [
-            PlayerState(
-                player_id=pid,
-                social_ap_max=actions_per_player,
-                social_ap=actions_per_player,
+        # Generate random personality for each player
+        import random
+        players = []
+        for pid in ids:
+            controls = Controls(
+                assertiveness=random.uniform(0.3, 0.9),
+                skepticism=random.uniform(0.3, 0.9),
+                query_rate=random.uniform(0.2, 0.8),
+                risk=random.uniform(0.2, 0.9),
+                deception=random.uniform(0.1, 0.8),
+                verbosity=random.uniform(0.3, 0.8),
             )
-            for pid in ids
-        ]
+            players.append(
+                PlayerState(
+                    player_id=pid,
+                    social_ap_max=effective_actions_per_player,
+                    social_ap=effective_actions_per_player,
+                    controls=controls,
+                )
+            )
         public_state = PublicState(game_id=game_id.strip().lower(), players=players)
         public_memory = PublicMemory()
         private_memories = {
@@ -77,7 +102,11 @@ class GameEngine:
             else:
                 roles[pid] = Role.town
 
-        phase_list = list(phases) if phases else [Phase.night, Phase.day, Phase.vote]
+        # Use phases from config if not explicitly provided
+        if phases is not None:
+            phase_list = list(phases)
+        else:
+            phase_list = [Phase(p.name) for p in self.game_config.phases]
         clock = PhaseClock(phase_list)
 
         self.runtime = GameRuntime(
@@ -88,8 +117,9 @@ class GameEngine:
             murderer_id=murderer,
             detective_id=detective,
             clock=clock,
+            game_config=self.game_config,
         )
-        self.actions_per_player = actions_per_player
+        self.actions_per_player = effective_actions_per_player
         self._initial_runtime = deepcopy(self.runtime)
 
     def _reset_runtime(self) -> None:
@@ -223,7 +253,8 @@ class GameEngine:
         player_id = player_id.strip().lower()
         role = self.runtime.roles.get(player_id)
         memory = self.runtime.private_memories.get(player_id)
-        if role is None or memory is None:
+        player = self.runtime.get_player(player_id)
+        if role is None or memory is None or player is None:
             raise ValueError("unknown player_id")
 
         return AgentObservation(
@@ -235,6 +266,7 @@ class GameEngine:
             public_memory=self.runtime.public_memory,
             role=role,
             private_memory=memory,
+            controls=player.controls,
         )
 
     def advance_phase(self) -> List[GameEvent]:
@@ -242,7 +274,15 @@ class GameEngine:
         self.runtime.public_state.round_num = self.runtime.clock.round
         for memory in self.runtime.private_memories.values():
             memory.round_num = self.runtime.public_state.round_num
-        if self.runtime.public_state.phase == Phase.day:
+
+        # Check if current phase should reset AP (from config or default day phase behavior)
+        phase_name = self.runtime.public_state.phase.value
+        phase_config = self.game_config.get_phase_config(phase_name)
+        should_reset_ap = (
+            (phase_config and phase_config.ap_reset)
+            or (phase_config is None and self.runtime.public_state.phase == Phase.day)
+        )
+        if should_reset_ap:
             for player in self.runtime.public_state.players:
                 player.social_ap_max = self.actions_per_player
                 player.social_ap = self.actions_per_player

@@ -10,6 +10,7 @@ from typing import Dict, List
 import yaml
 
 from mmllm.core.types import ActionRequest, AgentObservation
+from mmllm.llm.personality import get_personality_descriptors
 
 
 @dataclass(frozen=True)
@@ -127,6 +128,9 @@ def build_messages(
     observation_json = json.dumps(observation.model_dump(), ensure_ascii=False, indent=2)
     constraints_json = json.dumps(request.constraints.model_dump(), ensure_ascii=False, indent=2)
 
+    # Get personality descriptors from controls
+    personality_descriptors = get_personality_descriptors(observation.controls)
+
     format_args = {
         "request_id": request.request_id,
         "player_id": request.player_id,
@@ -139,6 +143,15 @@ def build_messages(
         "action_request": action_request_json,
         "observation": observation_json,
         "constraints": constraints_json,
+        # Add personality values
+        "assertiveness": f"{observation.controls.assertiveness:.2f}",
+        "skepticism": f"{observation.controls.skepticism:.2f}",
+        "query_rate": f"{observation.controls.query_rate:.2f}",
+        "risk": f"{observation.controls.risk:.2f}",
+        "deception": f"{observation.controls.deception:.2f}",
+        "verbosity": f"{observation.controls.verbosity:.2f}",
+        # Add personality descriptions
+        **personality_descriptors,
     }
 
     system_content = _safe_format(system_prompt, format_args)

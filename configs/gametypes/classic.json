@@ -1,0 +1,129 @@
+{
+  "name": "classic",
+  "version": "1.0",
+  "description": "Classic murder mystery with detective - matches default behavior",
+  "player_settings": {
+    "min_players": 6,
+    "max_players": 12,
+    "actions_per_player": 3
+  },
+  "phases": [
+    {
+      "name": "night",
+      "turn_order": "role_priority",
+      "role_priority": ["detective", "murderer"],
+      "end_condition": "all_acted",
+      "ap_reset": false
+    },
+    {
+      "name": "day",
+      "turn_order": "sequential",
+      "role_priority": [],
+      "end_condition": "ap_exhausted_or_all_passed",
+      "ap_reset": true
+    },
+    {
+      "name": "vote",
+      "turn_order": "random",
+      "role_priority": [],
+      "end_condition": "votes_cast",
+      "ap_reset": false
+    }
+  ],
+  "roles": {
+    "murderer": {
+      "team": "mafia",
+      "count": 1,
+      "abilities": [
+        {
+          "action": "kill",
+          "phase": "night",
+          "uses_per_round": 1,
+          "reveal_delay": 0
+        }
+      ]
+    },
+    "detective": {
+      "team": "town",
+      "count": 1,
+      "abilities": [
+        {
+          "action": "investigate",
+          "phase": "night",
+          "uses_per_round": 1,
+          "reveal_delay": 2
+        }
+      ]
+    },
+    "town": {
+      "team": "town",
+      "count": "remaining",
+      "abilities": []
+    }
+  },
+  "actions": {
+    "speak": {
+      "ap_cost": 1,
+      "ap_threshold": 1,
+      "phases": ["day"]
+    },
+    "question": {
+      "ap_cost": 2,
+      "ap_threshold": 2,
+      "phases": ["day"]
+    },
+    "poll": {
+      "ap_cost": 2,
+      "ap_threshold": 2,
+      "phases": ["day"]
+    },
+    "vote": {
+      "ap_cost": 0,
+      "ap_threshold": 0,
+      "phases": ["vote"]
+    },
+    "kill": {
+      "ap_cost": 0,
+      "ap_threshold": 0,
+      "phases": ["night"]
+    },
+    "investigate": {
+      "ap_cost": 0,
+      "ap_threshold": 0,
+      "phases": ["night"]
+    },
+    "whisper_send": {
+      "ap_cost": 1,
+      "ap_threshold": 1,
+      "phases": ["day"]
+    },
+    "whisper_reply": {
+      "ap_cost": 1,
+      "ap_threshold": 1,
+      "phases": ["day"]
+    },
+    "pass": {
+      "ap_cost": 0,
+      "ap_threshold": 0,
+      "phases": ["night", "day", "vote"]
+    }
+  },
+  "win_conditions": [
+    {
+      "winner": "town",
+      "condition_type": "role_eliminated",
+      "role": "murderer"
+    },
+    {
+      "winner": "murderer",
+      "condition_type": "custom_count",
+      "team": "town",
+      "count_lte": 1
+    }
+  ],
+  "special_rules": {
+    "round_1_skip_kill": true,
+    "opening_body_event": true,
+    "investigation_reveal_delay": 2
+  }
+}

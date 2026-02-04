@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(.venvScriptspython.exe -m pytest tests/ -v)",
+      "Bash(.venv/Scripts/python.exe -m pytest tests/ -v)",
+      "Bash(.venv/Scripts/python.exe test_personality.py)",
+      "Bash(mcp__jupyter get_cells:*)",
+      "Bash(find:*)",
+      "Bash(python -m py_compile:*)",
+      "Bash(pgrep:*)",
+      "Bash(del .\\\\nul)"
+    ]
+  }
+}

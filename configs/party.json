@@ -3,49 +3,49 @@
     "players": [
       {
         "player_id": "p1",
-        "display_name": "Starlight",
+        "display_name": "Pixie",
         "character_name": "",
         "score": 0
       },
       {
         "player_id": "p2",
-        "display_name": "Gladiator",
-        "character_name": "",
-        "score": 0
-      },
-      {
-        "player_id": "p3",
-        "display_name": "Nemesis",
-        "character_name": "",
-        "score": 0
-      },
-      {
-        "player_id": "p4",
-        "display_name": "Vandal",
-        "character_name": "",
-        "score": 0
-      },
-      {
-        "player_id": "p5",
-        "display_name": "Apex",
-        "character_name": "",
-        "score": 0
-      },
-      {
-        "player_id": "p6",
         "display_name": "Specter",
         "character_name": "",
         "score": 0
       },
       {
+        "player_id": "p3",
+        "display_name": "Vandal",
+        "character_name": "",
+        "score": 0
+      },
+      {
+        "player_id": "p4",
+        "display_name": "Rampager",
+        "character_name": "",
+        "score": 0
+      },
+      {
+        "player_id": "p5",
+        "display_name": "Bruiser",
+        "character_name": "",
+        "score": 0
+      },
+      {
+        "player_id": "p6",
+        "display_name": "Gizmo",
+        "character_name": "",
+        "score": 0
+      },
+      {
         "player_id": "p7",
-        "display_name": "Vortex",
+        "display_name": "Spark",
         "character_name": "",
         "score": 0
       },
       {
         "player_id": "p8",
-        "display_name": "Rebel",
+        "display_name": "Kairos",
         "character_name": "",
         "score": 0
       }

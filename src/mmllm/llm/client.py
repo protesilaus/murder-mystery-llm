@@ -35,3 +35,13 @@ class LLMClient(ABC):
         user_prompt: str | None = None,
     ) -> dict | None:
         raise NotImplementedError
+
+    @abstractmethod
+    def generate_response(
+        self,
+        user_message: str,
+        observation: AgentObservation,
+        system_prompt: str | None = None,
+    ) -> str:
+        """Generate a free-form text response to a user message with game context."""
+        raise NotImplementedError

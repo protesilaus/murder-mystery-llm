@@ -1,4 +1,31 @@
+/**
+ * Main application entry point
+ * Coordinates UI elements and event handlers
+ */
+
+import { closePlayerModal, sendModalChat } from './modules/players.js';
+import {
+  previewNextAction,
+  generateNarratorText,
+  fastForwardToPhase,
+  toggleAIChatHistory,
+  sendAIChat,
+  updateActionDetailsVisibility,
+  sendForceAction,
+} from './modules/ai.js';
+import {
+  renderGameSnapshot,
+  refreshGame,
+  runRound,
+  stepEvent,
+  showAllEvents,
+  rewindToCursor,
+  sendInterject,
+} from './modules/controls.js';
+import { startStatusPolling, stopStatusPolling, updateStatusDisplay } from './modules/status.js';
+
 (() => {
+  // Element references
   const statusPill = document.getElementById("status-pill");
   const statusLine = document.getElementById("status-line");
   const lastUpdated = document.getElementById("last-updated");
@@ -12,7 +39,6 @@
   const eventCount = document.getElementById("event-count");
   const phaseValue = document.getElementById("phase");
   const phaseIcon = document.getElementById("phase-icon");
-  const phaseMeta = document.getElementById("phase-meta");
   const aliveCount = document.getElementById("alive-count");
   const transcript = document.getElementById("transcript");
   const playersList = document.getElementById("players-list");
@@ -22,7 +48,13 @@
   const eventShowAll = document.getElementById("event-show-all");
   const eventRewind = document.getElementById("event-rewind");
   const timelineDetail = document.getElementById("timeline-detail");
-  const lastActionBody = document.getElementById("last-action-body");
+  const currentPlayer = document.getElementById("current-player");
+  const previousAction = document.getElementById("previous-action");
+  const playerModal = document.getElementById("player-modal");
+  const modalClose = document.getElementById("modal-close");
+  const modalCloseBtn = document.getElementById("modal-close-btn");
+  const modalChatInput = document.getElementById("modal-chat-input");
+  const modalChatSend = document.getElementById("modal-chat-send");
   const interjectVisibility = document.getElementById("interject-visibility");
   const interjectTargetField = document.getElementById("interject-target-field");
   const interjectTarget = document.getElementById("interject-target");
@@ -39,7 +71,39 @@
   const partyList = document.getElementById("party-list");
   const partySave = document.getElementById("party-save");
   const partyGenerate = document.getElementById("party-generate");
+  const aliveBadge = document.getElementById("alive-badge");
+  const toggleChatHistory = document.getElementById("toggle-chat-history");
+  const aiChatMessages = document.getElementById("ai-chat-messages");
+  const aiChatInput = document.getElementById("ai-chat-input");
+  const aiChatSend = document.getElementById("ai-chat-send");
+  const actionTypeSelect = document.getElementById("action-type-select");
+  const actionDetailsField = document.getElementById("action-details-field");
+  const actionDetails = document.getElementById("action-details");
+  const forceAction = document.getElementById("force-action");
+  const nextActor = document.getElementById("next-actor");
+  const narratorSection = document.getElementById("narrator-section");
+  const narratorText = document.getElementById("narrator-text");
+  const generateNarrator = document.getElementById("generate-narrator");
+  const fastForward = document.getElementById("fast-forward");
 
+  // Create elements object for passing to functions
+  const elements = {
+    timeline,
+    timelineDetail,
+    transcript,
+    playersList,
+    turnIndicator,
+    interjectTarget,
+    phaseIcon,
+    phaseValue,
+    aliveCount,
+    aliveBadge,
+    eventCount,
+    currentPlayer,
+    previousAction,
+  };
+
+  // Utility functions
   const formatTime = () =>
     new Date().toLocaleTimeString(undefined, {
       hour: "2-digit",
@@ -299,517 +363,10 @@
     }
   };
 
-  const pushTimelineEvent = (label, detail) => {
-    if (!timeline) return;
-    const item = document.createElement("div");
-    item.className = "timeline-item";
-
-    const title = document.createElement("strong");
-    title.textContent = label;
-    const description = document.createElement("div");
-    description.textContent = detail;
-
-    item.appendChild(title);
-    item.appendChild(description);
-    timeline.prepend(item);
-    if (eventCount) {
-      const current = Number.parseInt(eventCount.textContent || "0", 10);
-      eventCount.textContent = String(current + 1);
-    }
-  };
-
-  let lastSnapshot = null;
-  let currentEvents = [];
-  let eventCursor = null;
-  let currentMurdererId = null;
-  let currentDetectiveId = null;
-  let displayNameMap = {};
-
-  const visibleEvents = () => currentEvents;
-
-  const currentActorId = () => {
-    const events = visibleEvents();
-    for (let i = events.length - 1; i >= 0; i -= 1) {
-      if (events[i].actor_id) return events[i].actor_id;
-    }
-    return null;
-  };
-
-  const displayNameFor = (playerId) => {
-    if (!playerId) return "unknown";
-    return displayNameMap?.[playerId] || playerId;
-  };
-
-  const formatEvent = (event) => {
-    const type = event.event_type || "event";
-    const actor = event.actor_id ? `${displayNameFor(event.actor_id)}` : "";
-    const payload = event.payload || {};
-
-    switch (type) {
-      case "game_created":
-        return { label: "Game Created", detail: "A new game was initialized." };
-      case "phase_started":
-        return {
-          label: "Phase Started",
-          detail: `Phase ${payload.phase || event.phase}`,
-        };
-      case "message_public":
-        return {
-          label: "Public Message",
-          detail: `${actor}: ${payload.body || ""}`,
-        };
-      case "message_private":
-        return {
-          label: "Private Message",
-          detail: `${actor} → ${displayNameFor(payload.to || "")}: ${payload.body || ""}`,
-        };
-      case "vote_cast":
-        return {
-          label: "Vote Cast",
-          detail: `${actor} voted ${displayNameFor(payload.target || "")}`,
-        };
-      case "vote_resolved":
-        return {
-          label: "Vote Resolved",
-          detail: `Eliminated ${displayNameFor(payload.eliminated || "none")}`,
-        };
-      case "night_kill":
-        return {
-          label: "Night Kill",
-          detail: `${actor} killed ${displayNameFor(payload.target || "")}`,
-        };
-      case "player_eliminated":
-        return {
-          label: "Player Eliminated",
-          detail: `${displayNameFor(payload.player_id || "")} was eliminated`,
-        };
-      case "round_summary":
-        if (payload.note && typeof payload.note === "string" && payload.note.startsWith("parse_failed:")) {
-          return {
-            label: "Parse Failed",
-            detail: payload.note.replace("parse_failed:", "").trim() || "Parse failed.",
-          };
-        }
-        return {
-          label: "Round Summary",
-          detail: payload.note || "Pass",
-        };
-      case "game_ended":
-        return {
-          label: "Game Ended",
-          detail: `Winner: ${payload.winner || "unknown"}`,
-        };
-      default:
-        return {
-          label: type.replaceAll("_", " "),
-          detail: actor ? `${actor} ${JSON.stringify(payload)}` : JSON.stringify(payload),
-        };
-    }
-  };
-
-  const eventSymbol = (event) => {
-    switch (event.event_type) {
-      case "game_created":
-        return "★";
-      case "phase_started":
-        return "⏱";
-      case "message_public":
-        return "💬";
-      case "message_private":
-        return "🔒";
-      case "vote_cast":
-        return "🗳";
-      case "vote_resolved":
-        return "⚖";
-      case "night_kill":
-        return "🗡";
-      case "player_eliminated":
-        return "✖";
-      case "round_summary":
-        return "📝";
-      case "game_ended":
-        return "🏁";
-      default:
-        return "•";
-    }
-  };
-
-  const renderTimelineDetail = (event) => {
-    if (!timelineDetail) return;
-    timelineDetail.innerHTML = "";
-    if (!event) {
-      const empty = document.createElement("div");
-      empty.className = "empty-state";
-      empty.textContent = "Select an event to see details.";
-      timelineDetail.appendChild(empty);
-      return;
-    }
-    const { label, detail } = formatEvent(event);
-    const title = document.createElement("strong");
-    title.textContent = label;
-    const description = document.createElement("div");
-    description.textContent = detail;
-    timelineDetail.appendChild(title);
-    timelineDetail.appendChild(description);
-  };
-
-  const findLastActionEvent = (events) => {
-    if (!events || events.length === 0) return null;
-    const actionable = new Set([
-      "message_public",
-      "message_private",
-      "vote_cast",
-      "vote_resolved",
-      "night_kill",
-      "player_eliminated",
-      "round_summary",
-    ]);
-    for (let i = events.length - 1; i >= 0; i -= 1) {
-      if (actionable.has(events[i].event_type)) return events[i];
-    }
-    return events[events.length - 1];
-  };
-
-  const renderLastAction = (events) => {
-    if (!lastActionBody) return;
-    const event = findLastActionEvent(events);
-    if (!event) {
-      lastActionBody.textContent = "No actions yet.";
-      return;
-    }
-    const formatted = formatEvent(event);
-    lastActionBody.textContent = `${formatted.label}: ${formatted.detail}`;
-  };
-
-  const renderTimeline = (events) => {
-    if (!timeline) return;
-    timeline.innerHTML = "";
-    if (!events || events.length === 0) {
-      const empty = document.createElement("div");
-      empty.className = "empty-state";
-      empty.textContent = "No events yet. Start the engine to see activity.";
-      timeline.appendChild(empty);
-      return;
-    }
-
-    events.forEach((event, index) => {
-      const item = document.createElement("button");
-      item.type = "button";
-      item.className = "timeline-item symbol";
-      if (eventCursor !== null && index === eventCursor) {
-        item.classList.add("active");
-      }
-      item.textContent = eventSymbol(event);
-      item.title = formatEvent(event).label;
-      item.addEventListener("click", () => {
-        eventCursor = index;
-        renderTimelineDetail(event);
-        renderTimeline(visibleEvents());
-      });
-      timeline.appendChild(item);
-    });
-  };
-
-  const renderTranscript = (events) => {
-    if (!transcript) return;
-    transcript.innerHTML = "";
-
-    const publicMessages = (events || []).filter(
-      (event) => event.event_type === "message_public"
-    );
-    if (publicMessages.length === 0) {
-      const empty = document.createElement("div");
-      empty.className = "empty-state";
-      empty.textContent = "Transcript will appear here.";
-      transcript.appendChild(empty);
-      return;
-    }
-
-    publicMessages.forEach((event) => {
-      const item = document.createElement("div");
-      item.className = "timeline-item";
-      const title = document.createElement("strong");
-      title.textContent = displayNameFor(event.actor_id || "unknown");
-      const description = document.createElement("div");
-      description.textContent = event.payload?.body || "";
-      item.appendChild(title);
-      item.appendChild(description);
-      transcript.appendChild(item);
-    });
-    transcript.scrollTop = transcript.scrollHeight;
-  };
-
-  const renderPlayers = (players) => {
-    if (!playersList) return;
-    playersList.innerHTML = "";
-    if (!players || players.length === 0) {
-      const empty = document.createElement("div");
-      empty.className = "empty-state";
-      empty.textContent = "Players will appear here.";
-      playersList.appendChild(empty);
-      return;
-    }
-
-    const actorId = currentActorId();
-    if (turnIndicator) {
-      turnIndicator.textContent = actorId
-        ? `Turn: ${displayNameFor(actorId)} (${actorId})`
-        : "Awaiting turn";
-    }
-
-    if (interjectTarget) {
-      interjectTarget.innerHTML = "";
-      players.forEach((player) => {
-        const option = document.createElement("option");
-        option.value = player.player_id;
-        option.textContent = `${displayNameFor(player.player_id)} (${player.player_id})`;
-        interjectTarget.appendChild(option);
-      });
-    }
-
-    players.forEach((player) => {
-      const card = document.createElement("div");
-      card.className = "player-card";
-      if (actorId && actorId === player.player_id) {
-        card.classList.add("active");
-      }
-
-      const left = document.createElement("div");
-      left.className = "player-left";
-
-      const icon = document.createElement("div");
-      icon.className = "player-icon";
-      if (!player.alive) {
-        icon.textContent = "💀";
-      } else if (currentMurdererId && player.player_id === currentMurdererId) {
-        icon.textContent = "🗡";
-      } else if (currentDetectiveId && player.player_id === currentDetectiveId) {
-        icon.textContent = "🕵️";
-      } else {
-        icon.textContent = "❤";
-      }
-
-      const info = document.createElement("div");
-      const name = document.createElement("strong");
-      name.textContent = displayNameFor(player.player_id);
-      const meta = document.createElement("div");
-      meta.className = "player-meta";
-      meta.textContent = player.alive
-        ? `${player.player_id} · Alive`
-        : `${player.player_id} · Eliminated`;
-      if (!player.alive) {
-        meta.classList.add("player-status", "dead");
-      }
-      info.appendChild(name);
-      info.appendChild(meta);
-
-      left.appendChild(icon);
-      left.appendChild(info);
-
-      const whisper = document.createElement("button");
-      whisper.className = "btn ghost";
-      whisper.textContent = "Whisper";
-      whisper.addEventListener("click", () => {
-        if (!interjectVisibility || !interjectTarget) return;
-        interjectVisibility.value = "private";
-        interjectTarget.value = player.player_id;
-        toggleInterjectTarget();
-      });
-
-      card.appendChild(left);
-      card.appendChild(whisper);
-      playersList.appendChild(card);
-    });
-  };
-
-  const updateStats = (publicState, events) => {
-    if (publicState?.phase) {
-      const phaseName = publicState.phase;
-      const isNight = phaseName === "night";
-      if (phaseIcon) phaseIcon.textContent = isNight ? "🌙" : "☀";
-      if (phaseValue) phaseValue.textContent = String(publicState.round_num);
-    }
-    if (aliveCount && publicState?.players) {
-      const alive = publicState.players.filter((p) => p.alive).length;
-      aliveCount.textContent = String(alive);
-    }
-    if (eventCount && events) {
-      eventCount.textContent = String(events.length);
-    }
-  };
-
-  const renderGameSnapshot = (payload) => {
-    lastSnapshot = payload;
-    currentEvents = payload?.events || [];
-    currentMurdererId = payload?.murderer_id || null;
-    currentDetectiveId = payload?.detective_id || null;
-    displayNameMap = payload?.display_names || {};
-    if (eventCursor !== null) {
-      if (eventCursor >= currentEvents.length) {
-        eventCursor = currentEvents.length - 1;
-      }
-    }
-    const events = visibleEvents();
-    renderTimeline(events);
-    renderTranscript(events);
-    updateStats(payload?.public_state, currentEvents);
-    renderPlayers(payload?.public_state?.players || []);
-    renderLastAction(currentEvents);
-    if (eventCursor !== null && currentEvents[eventCursor]) {
-      renderTimelineDetail(currentEvents[eventCursor]);
-    } else {
-      renderTimelineDetail(null);
-    }
-  };
-
   const toggleInterjectTarget = () => {
     if (!interjectVisibility || !interjectTargetField) return;
     const isPrivate = interjectVisibility.value === "private";
     interjectTargetField.style.display = isPrivate ? "block" : "none";
-  };
-
-  const refreshGame = async (showMarker = true) => {
-    if (!refreshButton) return;
-    try {
-      const gameId = window.location.pathname.split("/").pop();
-      const response = await fetch(`/games/${encodeURIComponent(gameId)}`);
-      if (!response.ok) throw new Error("Failed to fetch game snapshot");
-      const payload = await response.json();
-      renderGameSnapshot(payload);
-      if (showMarker) {
-        pushTimelineEvent("Snapshot", `Manual refresh at ${formatTime()}.`);
-      }
-      touchUpdated();
-    } catch (error) {
-      setStatus(false, "Failed to refresh snapshot.");
-    }
-  };
-
-  const runRound = async () => {
-    if (!runRoundButton) return;
-    runRoundButton.disabled = true;
-    runRoundButton.textContent = "Running...";
-    try {
-      const gameId = window.location.pathname.split("/").pop();
-      const response = await fetch(`/games/${encodeURIComponent(gameId)}/action`, {
-        method: "POST",
-      });
-      if (!response.ok) throw new Error("Failed to run action");
-      const payload = await response.json();
-      renderGameSnapshot(payload);
-      pushTimelineEvent(
-        "Action Step",
-        `Round ${payload.round_num} · Phase ${payload.phase}`
-      );
-    } catch (error) {
-      setStatus(false, "Failed to run action.");
-    } finally {
-      runRoundButton.disabled = false;
-      runRoundButton.textContent = "Run Action";
-    }
-  };
-
-  const stepEvent = (direction) => {
-    if (!currentEvents.length || !lastSnapshot) return;
-    if (eventCursor === null) {
-      eventCursor = direction > 0 ? -1 : currentEvents.length - 1;
-    }
-    eventCursor = Math.max(-1, Math.min(currentEvents.length - 1, eventCursor + direction));
-    renderGameSnapshot(lastSnapshot || { events: currentEvents, public_state: null });
-  };
-
-  const showAllEvents = () => {
-    if (!lastSnapshot) return;
-    eventCursor = null;
-    renderGameSnapshot(lastSnapshot);
-  };
-
-  const rewindToCursor = async () => {
-    if (!eventRewind || !lastSnapshot) return;
-    const index = eventCursor === null ? currentEvents.length - 1 : eventCursor;
-    if (index < -1) return;
-    eventRewind.disabled = true;
-    eventRewind.textContent = "Rewinding...";
-    try {
-      const gameId = window.location.pathname.split("/").pop();
-      const response = await fetch(`/games/${encodeURIComponent(gameId)}/rewind`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ event_index: index }),
-      });
-      if (!response.ok) throw new Error("Failed to rewind");
-      const payload = await response.json();
-      eventCursor = null;
-      renderGameSnapshot(payload);
-      setStatus(true, "Rewound game history.");
-    } catch (error) {
-      setStatus(false, "Failed to rewind history.");
-    } finally {
-      eventRewind.disabled = false;
-      eventRewind.textContent = "Rewind Here";
-    }
-  };
-
-  const sendInterject = async () => {
-    if (!interjectSend) return;
-    const body = interjectBody?.value?.trim() || "";
-    if (!body) {
-      if (interjectResult) interjectResult.textContent = "Message is required.";
-      return;
-    }
-    const visibility = interjectVisibility?.value || "public";
-    const toPlayer = interjectTarget?.value || "";
-    const speaker = interjectSpeaker?.value?.trim() || "narrator";
-    const recordHistory = interjectRecord?.checked ?? true;
-
-    interjectSend.disabled = true;
-    interjectSend.textContent = "Sending...";
-    try {
-      const gameId = window.location.pathname.split("/").pop();
-      const response = await fetch(`/games/${encodeURIComponent(gameId)}/interject`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          body,
-          visibility,
-          to_player_id: visibility === "private" ? toPlayer : null,
-          speaker_id: speaker,
-          record_history: recordHistory,
-        }),
-      });
-      const payload = await response.json();
-      if (!response.ok || !payload.ok) {
-        throw new Error(payload?.error || "Interject failed");
-      }
-      if (interjectResult) {
-        interjectResult.textContent = payload.recorded
-          ? "Interjection recorded."
-          : "Interjection sent (not recorded).";
-      }
-      if (payload.recorded) {
-        await refreshGame();
-      } else if (payload.event) {
-        const event = payload.event;
-        pushTimelineEvent("Interject", event.payload?.body || "");
-        if (event.event_type === "message_public" && transcript) {
-          const item = document.createElement("div");
-          item.className = "timeline-item";
-          const title = document.createElement("strong");
-          title.textContent = event.actor_id || "narrator";
-          const description = document.createElement("div");
-          description.textContent = event.payload?.body || "";
-          item.appendChild(title);
-          item.appendChild(description);
-          transcript.prepend(item);
-          transcript.scrollTop = transcript.scrollHeight;
-        }
-      }
-    } catch (error) {
-      if (interjectResult) interjectResult.textContent = "Interject failed.";
-    } finally {
-      interjectSend.disabled = false;
-      interjectSend.textContent = "Interject";
-    }
   };
 
   const testOllama = async () => {
@@ -864,28 +421,44 @@
     }
   };
 
+  // Wrapper functions to pass proper arguments
+  const doPreviewNextAction = () => previewNextAction(nextActor, narratorSection, narratorText);
+  const doGenerateNarratorText = () => generateNarratorText(generateNarrator, narratorText);
+  const doFastForwardToPhase = () => fastForwardToPhase(fastForward, (p) => renderGameSnapshot(p, elements, doPreviewNextAction), doPreviewNextAction);
+  const doToggleAIChatHistory = () => toggleAIChatHistory(aiChatMessages, toggleChatHistory);
+  const doSendAIChat = () => sendAIChat(aiChatInput, aiChatMessages, aiChatSend);
+  const doUpdateActionDetailsVisibility = () => updateActionDetailsVisibility(actionTypeSelect, actionDetailsField);
+  const doSendForceAction = () => sendForceAction(forceAction, actionTypeSelect, actionDetails, actionDetailsField, doRefreshGame);
+  const doRefreshGame = (showMarker = true) => refreshGame(refreshButton, elements, doPreviewNextAction, showMarker);
+  const doRunRound = () => runRound(runRoundButton, elements, doPreviewNextAction);
+  const doStepEvent = (direction) => stepEvent(direction, elements, doPreviewNextAction);
+  const doShowAllEvents = () => showAllEvents(elements, doPreviewNextAction);
+  const doRewindToCursor = () => rewindToCursor(eventRewind, elements, doPreviewNextAction);
+  const doSendInterject = () => sendInterject(interjectSend, interjectBody, interjectVisibility, interjectTarget, interjectSpeaker, interjectRecord, interjectResult, doRefreshGame);
+
+  // Event listeners
   if (createButton) {
     createButton.addEventListener("click", createGame);
   }
 
   if (refreshButton) {
-    refreshButton.addEventListener("click", refreshGame);
+    refreshButton.addEventListener("click", doRefreshGame);
   }
 
   if (runRoundButton) {
-    runRoundButton.addEventListener("click", runRound);
+    runRoundButton.addEventListener("click", doRunRound);
   }
 
-  if (eventPrev) eventPrev.addEventListener("click", () => stepEvent(-1));
-  if (eventNext) eventNext.addEventListener("click", () => stepEvent(1));
-  if (eventShowAll) eventShowAll.addEventListener("click", showAllEvents);
-  if (eventRewind) eventRewind.addEventListener("click", rewindToCursor);
+  if (eventPrev) eventPrev.addEventListener("click", () => doStepEvent(-1));
+  if (eventNext) eventNext.addEventListener("click", () => doStepEvent(1));
+  if (eventShowAll) eventShowAll.addEventListener("click", doShowAllEvents);
+  if (eventRewind) eventRewind.addEventListener("click", doRewindToCursor);
 
   if (interjectVisibility) {
     interjectVisibility.addEventListener("change", toggleInterjectTarget);
     toggleInterjectTarget();
   }
-  if (interjectSend) interjectSend.addEventListener("click", sendInterject);
+  if (interjectSend) interjectSend.addEventListener("click", doSendInterject);
 
   if (ollamaTestButton) {
     ollamaTestButton.addEventListener("click", testOllama);
@@ -898,8 +471,58 @@
     partyGenerate.addEventListener("click", generatePartyNames);
   }
 
+  if (toggleChatHistory) {
+    toggleChatHistory.addEventListener("click", doToggleAIChatHistory);
+  }
+
+  if (aiChatSend) {
+    aiChatSend.addEventListener("click", doSendAIChat);
+  }
+
+  if (aiChatInput) {
+    aiChatInput.addEventListener("keypress", (e) => {
+      if (e.key === "Enter") doSendAIChat();
+    });
+  }
+
+  if (actionTypeSelect) {
+    actionTypeSelect.addEventListener("change", doUpdateActionDetailsVisibility);
+  }
+
+  if (forceAction) {
+    forceAction.addEventListener("click", doSendForceAction);
+  }
+
+  if (generateNarrator) {
+    generateNarrator.addEventListener("click", doGenerateNarratorText);
+  }
+
+  if (fastForward) {
+    fastForward.addEventListener("click", doFastForwardToPhase);
+  }
+
+  // Modal event listeners
+  if (modalClose) modalClose.addEventListener("click", closePlayerModal);
+  if (modalCloseBtn) modalCloseBtn.addEventListener("click", closePlayerModal);
+  if (modalChatSend) modalChatSend.addEventListener("click", sendModalChat);
+  if (modalChatInput) {
+    modalChatInput.addEventListener("keypress", (e) => {
+      if (e.key === "Enter") sendModalChat();
+    });
+  }
+  if (playerModal) {
+    playerModal.addEventListener("click", (e) => {
+      if (e.target === playerModal) closePlayerModal();
+    });
+  }
+
+  // Initial load
   if (refreshButton && window.location.pathname.startsWith("/game/")) {
-    refreshGame(false);
+    doRefreshGame(false);
+
+    // Start status polling for game page
+    const gameId = window.location.pathname.split("/").pop();
+    startStatusPolling(gameId, updateStatusDisplay);
   }
 
   if (partyList) {
@@ -908,7 +531,9 @@
 
   checkHealth();
   fetchGames();
+
+  // Cleanup on page unload
+  window.addEventListener("beforeunload", () => {
+    stopStatusPolling();
+  });
 })();
-
-
-

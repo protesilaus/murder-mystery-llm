@@ -1,10 +1,15 @@
 """Authoritative game state and runtime helpers."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
-from typing import Dict, List, Set
+from typing import TYPE_CHECKING, Dict, List, Set
 
 from mmllm.core.clock import PhaseClock
-from mmllm.core.types import GameEvent, Phase, PlayerState, PrivateMemory, PublicMemory, PublicState, Role
+from mmllm.core.types import GameEvent, GameStatus, Phase, PlayerState, PrivateMemory, PublicMemory, PublicState, Role
+
+if TYPE_CHECKING:
+    from mmllm.core.game_config import GameTypeConfig
 
 
 @dataclass
@@ -31,6 +36,8 @@ class GameRuntime:
     pending_reveals: List[dict] = field(default_factory=list)
     night1_investigation_done: bool = False
     night1_body_emitted: bool = False
+    game_config: GameTypeConfig | None = None
+    execution_status: GameStatus = field(default_factory=GameStatus)
 
     def living_players(self) -> List[PlayerState]:
         return [p for p in self.public_state.players if p.alive]

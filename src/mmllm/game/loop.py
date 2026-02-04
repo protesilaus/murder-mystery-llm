@@ -3,24 +3,26 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Dict, Iterable, List
+from typing import Dict, List
 from uuid import uuid4
 
 from mmllm.agents.base import Agent
+from mmllm.agents.summary_agent import SummaryAgent
+from mmllm.core.game_config import GameTypeConfig, TurnOrder
 from mmllm.core.rng import RNG
-
 from mmllm.core.types import (
     ActionRequest,
     ActionResponse,
     ActionType,
     EventType,
+    ExecutionStatus,
     GameEvent,
+    GameStatus,
     Phase,
     Visibility,
 )
-from mmllm.game.rules import legal_actions
 from mmllm.game.engine import GameEngine
-from mmllm.agents.summary_agent import SummaryAgent
+from mmllm.game.rules import legal_actions
 
 
 class GameLoop:
@@ -69,35 +71,69 @@ class GameLoop:
         ):
             runtime.turn_phase = runtime.public_state.phase
             runtime.turn_round = runtime.public_state.round_num
-            if runtime.public_state.phase == Phase.night:
+
+            # Get phase config for turn order
+            config = runtime.game_config or GameTypeConfig.default_classic()
+            phase_config = config.get_phase_config(runtime.public_state.phase.value)
+
+            if phase_config and phase_config.turn_order == TurnOrder.role_priority:
+                # Use role priority order from config
                 order: List[str] = []
-                detective_id = runtime.detective_id
-                if detective_id and runtime.get_player(detective_id) and runtime.get_player(detective_id).alive:
-                    order.append(detective_id)
-                murderer_id = runtime.murderer_id
-                if murderer_id and runtime.get_player(murderer_id) and runtime.get_player(murderer_id).alive:
-                    if murderer_id not in order:
-                        order.append(murderer_id)
+                for role_name in phase_config.role_priority:
+                    for pid, role in runtime.roles.items():
+                        if role.value == role_name:
+                            player = runtime.get_player(pid)
+                            if player and player.alive and pid not in order:
+                                order.append(pid)
                 runtime.turn_order = order
+            elif phase_config and phase_config.turn_order == TurnOrder.random:
+                # Use random shuffle
+                runtime.turn_order = self._turn_order()
             else:
+                # Default: sequential (sorted) order
                 runtime.turn_order = self._step_order()
+
             runtime.turn_index = 0
             runtime.cycle_passes.clear()
 
     def _apply_agent_action(self, player_id: str) -> ActionResponse | None:
+        runtime = self.engine.runtime
+
+        # Update: Requesting action
+        runtime.execution_status = GameStatus(
+            status=ExecutionStatus.querying_llm,
+            current_actor=player_id,
+            action_description=f"Requesting action from {player_id}",
+        )
+
         agent = self.agents.get(player_id)
         if agent is None:
+            runtime.execution_status = GameStatus(status=ExecutionStatus.idle)
             return None
 
         request = self._request_for(player_id)
+        runtime.execution_status.request_id = request.request_id
+
+        # Update: Waiting for LLM response
+        runtime.execution_status.status = ExecutionStatus.waiting_response
+        runtime.execution_status.action_description = f"Waiting for {player_id} response"
+
         observation = self.engine.observation_for(player_id)
         agent.observe(observation)
         response = agent.act(request, observation)
+
+        # Update: Applying action
+        runtime.execution_status.status = ExecutionStatus.applying_action
+        runtime.execution_status.action_description = f"Applying {player_id}'s action"
+
         try:
             self.engine.apply_action(response)
             return response
         except ValueError:
             return None
+        finally:
+            # Reset to idle
+            runtime.execution_status = GameStatus(status=ExecutionStatus.idle)
 
     def _emit_public_message(self, body: str, *, actor_id: str = "narrator") -> GameEvent:
         event = GameEvent(
@@ -126,11 +162,15 @@ class GameLoop:
         runtime = self.engine.runtime
         start_idx = runtime.last_summary_index
         events = runtime.event_history[start_idx:]
+        
+        # Filter to only public events - don't leak private messages to the summary
+        public_events = [evt for evt in events if evt.visibility.mode == "public"]
+        
         public_state_json = runtime.public_state.model_dump_json(indent=2)
         transcript_json = runtime.public_memory.model_dump_json(indent=2)
         events_json = (
-            "[" + ", ".join(evt.model_dump_json() for evt in events) + "]"
-            if events
+            "[" + ", ".join(evt.model_dump_json() for evt in public_events) + "]"
+            if public_events
             else "[]"
         )
         summary = self.summary_agent.summarize(public_state_json, transcript_json, events_json).strip()
@@ -198,25 +238,32 @@ class GameLoop:
 
     def step_phase(self) -> None:
         phase = self.engine.runtime.public_state.phase
+        config = self.engine.runtime.game_config or GameTypeConfig.default_classic()
+
         if phase == Phase.setup:
             self.engine.start()
             return
 
         if phase == Phase.night:
-            if self.engine.runtime.public_state.round_num == 1:
+            is_round_1 = self.engine.runtime.public_state.round_num == 1
+            skip_kill_round_1 = config.special_rules.round_1_skip_kill
+
+            if is_round_1 and skip_kill_round_1:
+                # Round 1 special case: only detective acts, then body event
                 detective_id = self.engine.runtime.detective_id
                 if detective_id and detective_id in self.agents:
                     self._apply_agent_action(detective_id)
-                self._opening_body_event()
+                if config.special_rules.opening_body_event:
+                    self._opening_body_event()
                 self.engine.advance_phase()
                 self._on_day_start()
                 return
-            detective_id = self.engine.runtime.detective_id
-            if detective_id and detective_id in self.agents:
-                self._apply_agent_action(detective_id)
-            murderer = self.engine.runtime.murderer_id
-            if murderer in self.agents:
-                self._apply_agent_action(murderer)
+
+            # Normal night: use turn order from config
+            self._ensure_step_order()
+            for player_id in self.engine.runtime.turn_order:
+                if player_id in self.agents:
+                    self._apply_agent_action(player_id)
             self.engine.advance_phase()
             self._on_day_start()
             return
@@ -231,8 +278,10 @@ class GameLoop:
             return
 
         if phase == Phase.vote:
-            for player_id in self._turn_order():
-                self._apply_agent_action(player_id)
+            self._ensure_step_order()
+            for player_id in self.engine.runtime.turn_order:
+                if player_id in self.agents:
+                    self._apply_agent_action(player_id)
             self.engine.resolve_votes()
             self._update_memories()
             self.engine.advance_phase()
@@ -264,6 +313,8 @@ class GameLoop:
     def step_action(self) -> List[GameEvent]:
         before = len(self.engine.runtime.event_history)
         phase = self.engine.runtime.public_state.phase
+        config = self.engine.runtime.game_config or GameTypeConfig.default_classic()
+
         if phase == Phase.setup:
             self.engine.start()
             return self.engine.runtime.event_history[before:]
@@ -271,7 +322,11 @@ class GameLoop:
         if phase == Phase.ended:
             return []
 
-        if phase == Phase.night and self.engine.runtime.public_state.round_num == 1:
+        # Handle round 1 night special case (if configured)
+        is_round_1 = self.engine.runtime.public_state.round_num == 1
+        skip_kill_round_1 = config.special_rules.round_1_skip_kill
+
+        if phase == Phase.night and is_round_1 and skip_kill_round_1:
             runtime = self.engine.runtime
             detective_id = runtime.detective_id
             if detective_id and not runtime.night1_investigation_done and detective_id in self.agents:
@@ -279,7 +334,8 @@ class GameLoop:
                 runtime.night1_investigation_done = True
                 return self.engine.runtime.event_history[before:]
             if not runtime.night1_body_emitted:
-                self._opening_body_event()
+                if config.special_rules.opening_body_event:
+                    self._opening_body_event()
                 runtime.night1_body_emitted = True
                 self.engine.advance_phase()
                 self._on_day_start()
@@ -325,7 +381,7 @@ class GameLoop:
         response = self._apply_agent_action(player_id)
 
         if phase == Phase.day:
-            if response and response.action.action_type == ActionType.pass_turn:
+            if response and response.action.type == ActionType.pass_turn:
                 runtime.cycle_passes.add(player_id)
             elif response:
                 runtime.cycle_passes.clear()
@@ -355,3 +411,81 @@ class GameLoop:
                 runtime.cycle_passes.clear()
 
         return self.engine.runtime.event_history[before:]
+
+    def preview_next_actor(self) -> dict:
+        """Preview who will act next without executing the action."""
+        runtime = self.engine.runtime
+        phase = runtime.public_state.phase
+        config = runtime.game_config or GameTypeConfig.default_classic()
+
+        # Check for pending question response
+        if phase == Phase.day and runtime.pending_question_to:
+            target_id = runtime.pending_question_to
+            target = runtime.get_player(target_id)
+            if target and target.alive:
+                return {
+                    "actor_id": target_id,
+                    "actor_type": "player",
+                    "reason": "responding_to_question",
+                }
+
+        # Check for round 1 night special cases
+        is_round_1 = runtime.public_state.round_num == 1
+        skip_kill_round_1 = config.special_rules.round_1_skip_kill
+
+        if phase == Phase.night and is_round_1 and skip_kill_round_1:
+            detective_id = runtime.detective_id
+            if detective_id and not runtime.night1_investigation_done:
+                return {
+                    "actor_id": detective_id,
+                    "actor_type": "player",
+                    "reason": "night1_investigation",
+                }
+            if not runtime.night1_body_emitted and config.special_rules.opening_body_event:
+                return {
+                    "actor_id": "narrator",
+                    "actor_type": "narrator",
+                    "reason": "opening_body_event",
+                }
+
+        # Ensure turn order is set up
+        self._ensure_step_order()
+
+        # Check if we're at the end of turn order
+        if runtime.turn_index >= len(runtime.turn_order):
+            if phase == Phase.vote:
+                return {
+                    "actor_id": "narrator",
+                    "actor_type": "narrator",
+                    "reason": "resolve_votes",
+                }
+            if phase in (Phase.night, Phase.vote):
+                return {
+                    "actor_id": "narrator",
+                    "actor_type": "narrator",
+                    "reason": "phase_advance",
+                }
+            if phase == Phase.day:
+                # Day phase loops, so reset to start
+                if runtime.turn_order:
+                    return {
+                        "actor_id": runtime.turn_order[0],
+                        "actor_type": "player",
+                        "reason": "new_cycle",
+                    }
+
+        # Get the next player in turn order
+        if runtime.turn_index < len(runtime.turn_order):
+            player_id = runtime.turn_order[runtime.turn_index]
+            return {
+                "actor_id": player_id,
+                "actor_type": "player",
+                "reason": "normal_turn",
+            }
+
+        # Fallback - phase transition
+        return {
+            "actor_id": "narrator",
+            "actor_type": "narrator",
+            "reason": "phase_transition",
+        }

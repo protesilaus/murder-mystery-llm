@@ -118,16 +118,16 @@
       issues.push("Missing action object.");
     } else {
       const action = value.action;
-      if (!("action_type" in action)) {
-        issues.push("Missing action.action_type.");
-      } else if (typeof action.action_type !== "string") {
-        issues.push("action.action_type must be a string.");
+      if (!("type" in action)) {
+        issues.push("Missing action.type.");
+      } else if (typeof action.type !== "string") {
+        issues.push("action.type must be a string.");
       }
 
-      const actionType = action?.action_type;
+      const actionType = action?.type;
       const allowed = ["speak", "question", "poll", "investigate", "whisper_send", "whisper_reply", "vote", "kill", "pass"];
       if (actionType && !allowed.includes(actionType)) {
-        issues.push(`action.action_type must be one of ${allowed.join(", ")}.`);
+        issues.push(`action.type must be one of ${allowed.join(", ")}.`);
       }
 
       if (actionType === "speak" && typeof action.body !== "string") {
@@ -177,7 +177,7 @@
     if (value?.player_id) values.push({ label: "player_id", value: value.player_id });
     if (typeof value?.round_num === "number") values.push({ label: "round_num", value: String(value.round_num) });
     if (value?.phase) values.push({ label: "phase", value: value.phase });
-    if (value?.action?.action_type) values.push({ label: "action_type", value: value.action.action_type });
+    if (value?.action?.type) values.push({ label: "type", value: value.action.type });
     if (value?.action?.target_player_id) values.push({ label: "target_player_id", value: value.action.target_player_id });
     if (value?.action?.to_player_id) values.push({ label: "to_player_id", value: value.action.to_player_id });
 

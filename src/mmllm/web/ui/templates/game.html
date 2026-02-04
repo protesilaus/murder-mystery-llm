@@ -12,35 +12,83 @@
       </div>
     </aside>
     <div class="panel main-panel">
-      <div class="hero-text">
-        <div class="hero-header">
-          <p class="eyebrow">Live Game Room</p>
-          <div class="phase-pill compact" id="phase-card">
-            <span class="phase-icon" id="phase-icon">☀</span>
-            <strong class="stat-value" id="phase">1</strong>
+      <div class="game-header">
+        <div class="game-header-top">
+          <div>
+            <p class="eyebrow">Live Game Room</p>
+            <h1 class="game-title">
+              {{ game_id }}
+              <span class="alive-badge" id="alive-badge">8/8</span>
+            </h1>
+          </div>
+          <div class="phase-info-compact">
+            <div class="phase-pill compact" id="phase-card">
+              <span class="phase-icon" id="phase-icon">☀</span>
+              <strong class="stat-value" id="phase">1</strong>
+            </div>
+            <div class="event-badge" id="event-badge">
+              <span class="event-icon">📝</span>
+              <span id="event-count">0</span>
+            </div>
           </div>
         </div>
-        <h1>{{ game_id }}</h1>
-        <p class="lede">
-          This page is wired for WebSocket updates. Once the engine emits events,
-          the timeline and transcript below can update in real time.
-        </p>
-        <div class="hero-actions">
-          <a class="btn ghost" href="/">Back to Control Room</a>
-          <button class="btn primary" id="run-round">Run Action</button>
-          <button class="btn secondary" id="refresh-game">Refresh Snapshot</button>
+        <div class="current-turn-info">
+          <span class="stat-label">Next Actor:</span>
+          <strong id="next-actor">—</strong>
         </div>
-      </div>
-      <div class="hero-panel">
-        <div class="stat-card">
-          <span class="stat-label">Alive</span>
-          <strong class="stat-value" id="alive-count">8</strong>
-          <span class="stat-meta">Players remaining</span>
+        <!-- Game Execution Status -->
+        <div class="game-status-section" id="game-status-section">
+          <div class="status-message" id="status-message">
+            <span class="status-icon" id="status-icon">⏸️</span>
+            <span class="status-text" id="status-text">Ready</span>
+          </div>
+          <div class="status-details" id="status-details" style="display: none;">
+            <a href="#" id="view-prompt-link" class="prompt-link">View Query Sent →</a>
+          </div>
         </div>
-        <div class="stat-card">
-          <span class="stat-label">Events</span>
-          <strong class="stat-value" id="event-count">0</strong>
-          <span class="stat-meta">Synced</span>
+        <div class="narrator-section" id="narrator-section" style="display: none;">
+          <div class="ai-chat-header">
+            <h3>Narrator Text</h3>
+            <button class="btn ghost compact-btn" id="generate-narrator">Generate</button>
+          </div>
+          <textarea class="input textarea" id="narrator-text" rows="4" placeholder="Narrator text will appear here..."></textarea>
+        </div>
+        <div class="ai-interaction-section">
+          <div class="ai-chat-header">
+            <h3>Speak with AI</h3>
+            <button class="btn ghost compact-btn" id="toggle-chat-history">History</button>
+          </div>
+          <div class="ai-chat-messages" id="ai-chat-messages" style="display: none;">
+            <div class="empty-state">Chat history will appear here.</div>
+          </div>
+          <div class="ai-chat-input-row">
+            <input type="text" class="input" id="ai-chat-input" placeholder="Type a message to the AI..." />
+            <button class="btn secondary compact-btn" id="ai-chat-send">Send</button>
+          </div>
+        </div>
+        <div class="ai-action-control">
+          <h3>Control Next Action</h3>
+          <div class="action-control-row">
+            <select class="select compact" id="action-type-select">
+              <option value="">— Choose action type —</option>
+              <option value="speak">Speak</option>
+              <option value="question">Question</option>
+              <option value="poll">Poll</option>
+              <option value="vote">Vote</option>
+              <option value="pass">Pass</option>
+            </select>
+            <button class="btn secondary compact-btn" id="force-action">Force Action</button>
+          </div>
+          <div class="field" id="action-details-field" style="display: none; margin-top: 0.5rem;">
+            <label class="field-label">Action Details (JSON)</label>
+            <textarea class="input textarea" id="action-details" rows="3" placeholder='{"target": "player_id", "body": "message"}'></textarea>
+          </div>
+        </div>
+        <div class="game-actions-bottom">
+          <a class="btn ghost compact-btn" href="/">Back</a>
+          <button class="btn secondary compact-btn" id="refresh-game">Refresh</button>
+          <button class="btn secondary compact-btn" id="fast-forward">⏩ Phase</button>
+          <button class="btn primary action-btn" id="run-round">▶️</button>
         </div>
       </div>
     </div>
@@ -71,12 +119,61 @@
     <div class="panel-body timeline" id="timeline">
       <div class="empty-state">No events yet. Start the engine to see activity.</div>
     </div>
-    <div class="panel-body last-action" id="last-action">
-      <div class="panel-note">Last Action</div>
-      <div class="last-action-body" id="last-action-body">No actions yet.</div>
-    </div>
     <div class="panel-body timeline-detail" id="timeline-detail">
       <div class="empty-state">Select an event to see details.</div>
     </div>
   </section>
+
+  <div class="modal-overlay" id="player-modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 id="modal-player-name">Player Details</h2>
+        <button class="modal-close" id="modal-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="agent-details">
+          <div class="agent-section">
+            <h3>Agent Information</h3>
+            <div class="agent-info-grid">
+              <div class="agent-info-item">
+                <span class="agent-info-label">Player ID</span>
+                <span class="agent-info-value" id="modal-player-id">—</span>
+              </div>
+              <div class="agent-info-item">
+                <span class="agent-info-label">Status</span>
+                <span class="agent-info-value" id="modal-player-status">—</span>
+              </div>
+              <div class="agent-info-item">
+                <span class="agent-info-label">Role</span>
+                <span class="agent-info-value" id="modal-player-role">—</span>
+              </div>
+              <div class="agent-info-item">
+                <span class="agent-info-label">Social AP</span>
+                <span class="agent-info-value" id="modal-player-ap">—</span>
+              </div>
+            </div>
+          </div>
+          <div class="agent-section">
+            <h3>Current Knowledge</h3>
+            <div class="agent-knowledge" id="modal-player-knowledge">
+              <p>Knowledge context will appear here...</p>
+            </div>
+          </div>
+          <div class="agent-section">
+            <h3>Chat with Agent</h3>
+            <div class="chat-interface">
+              <div class="chat-messages" id="modal-chat-messages"></div>
+              <div class="chat-input-row">
+                <input type="text" class="input" id="modal-chat-input" placeholder="Type a message..." />
+                <button class="btn primary" id="modal-chat-send">Send</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn ghost" id="modal-close-btn">Close</button>
+      </div>
+    </div>
+  </div>
 {% endblock %}
