@@ -37,13 +37,15 @@ def load_party_defaults() -> Dict[str, object]:
     return _load_party_defaults()
 
 
-def _default_players(count: int, defaults: Dict[str, object]) -> List[Dict[str, object]]:
+def _default_players(
+    count: int, defaults: Dict[str, object]
+) -> List[Dict[str, object]]:
     display_name_template = str(defaults.get("display_name", "Agent {index}"))
     character_name_template = str(defaults.get("character_name", ""))
     score_default = defaults.get("score", 0)
     return [
         {
-            "player_id": f"p{i+1}",
+            "player_id": f"p{i + 1}",
             "display_name": _apply_template(display_name_template, i + 1),
             "character_name": _apply_template(character_name_template, i + 1),
             "score": score_default,
@@ -69,7 +71,11 @@ def load_party_config(
     if player_count is None:
         player_count = load_game_config().player_count
     party_defaults = _load_party_defaults()
-    defaults = party_defaults.get("defaults", {}) if isinstance(party_defaults.get("defaults", {}), dict) else {}
+    defaults = (
+        party_defaults.get("defaults", {})
+        if isinstance(party_defaults.get("defaults", {}), dict)
+        else {}
+    )
 
     if not path.exists():
         legacy_path = Path.cwd() / "configs" / "party.yaml"
@@ -109,25 +115,31 @@ def load_party_config(
             {
                 "player_id": pid,
                 "display_name": str(entry.get("display_name", pid)).strip()
-                or _apply_template(str(defaults.get("display_name", pid)), len(normalized) + 1),
+                or _apply_template(
+                    str(defaults.get("display_name", pid)), len(normalized) + 1
+                ),
                 "character_name": str(entry.get("character_name", "")).strip()
-                or _apply_template(str(defaults.get("character_name", "")), len(normalized) + 1),
+                or _apply_template(
+                    str(defaults.get("character_name", "")), len(normalized) + 1
+                ),
                 "score": entry.get("score", 0),
             }
         )
 
     if len(normalized) < player_count:
         for idx in range(len(normalized), player_count):
-            pid = f"p{idx+1}"
+            pid = f"p{idx + 1}"
             if pid in seen:
                 continue
             normalized.append(
                 {
                     "player_id": pid,
                     "display_name": _apply_template(
-                        str(defaults.get("display_name", f"Agent {idx+1}")), idx + 1
+                        str(defaults.get("display_name", f"Agent {idx + 1}")), idx + 1
                     ),
-                    "character_name": _apply_template(str(defaults.get("character_name", "")), idx + 1),
+                    "character_name": _apply_template(
+                        str(defaults.get("character_name", "")), idx + 1
+                    ),
                     "score": defaults.get("score", 0),
                 }
             )
@@ -140,7 +152,9 @@ def load_party_config(
     return data
 
 
-def save_party_config(data: Dict[str, object], *, config_path: Path | None = None) -> None:
+def save_party_config(
+    data: Dict[str, object], *, config_path: Path | None = None
+) -> None:
     path = _party_path(config_path)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(

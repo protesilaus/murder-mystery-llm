@@ -125,8 +125,12 @@ def build_messages(
 ) -> List[Dict[str, str]]:
     allowed_actions = [action.value for action in request.allowed_actions]
     action_request_json = json.dumps(request.model_dump(), ensure_ascii=False, indent=2)
-    observation_json = json.dumps(observation.model_dump(), ensure_ascii=False, indent=2)
-    constraints_json = json.dumps(request.constraints.model_dump(), ensure_ascii=False, indent=2)
+    observation_json = json.dumps(
+        observation.model_dump(), ensure_ascii=False, indent=2
+    )
+    constraints_json = json.dumps(
+        request.constraints.model_dump(), ensure_ascii=False, indent=2
+    )
 
     # Get personality descriptors from controls
     personality_descriptors = get_personality_descriptors(observation.controls)

@@ -199,7 +199,9 @@ class GameTypeConfig(BaseModel):
                     team=Team.town,
                     count=1,
                     abilities=[
-                        AbilityConfig(action="investigate", phase="night", reveal_delay=2)
+                        AbilityConfig(
+                            action="investigate", phase="night", reveal_delay=2
+                        )
                     ],
                 ),
                 "town": RoleConfig(
@@ -213,10 +215,16 @@ class GameTypeConfig(BaseModel):
                 "poll": ActionConfig(ap_cost=2, ap_threshold=2, phases=["day"]),
                 "vote": ActionConfig(ap_cost=0, ap_threshold=0, phases=["vote"]),
                 "kill": ActionConfig(ap_cost=0, ap_threshold=0, phases=["night"]),
-                "investigate": ActionConfig(ap_cost=0, ap_threshold=0, phases=["night"]),
+                "investigate": ActionConfig(
+                    ap_cost=0, ap_threshold=0, phases=["night"]
+                ),
                 "whisper_send": ActionConfig(ap_cost=1, ap_threshold=1, phases=["day"]),
-                "whisper_reply": ActionConfig(ap_cost=1, ap_threshold=1, phases=["day"]),
-                "pass": ActionConfig(ap_cost=0, ap_threshold=0, phases=["night", "day", "vote"]),
+                "whisper_reply": ActionConfig(
+                    ap_cost=1, ap_threshold=1, phases=["day"]
+                ),
+                "pass": ActionConfig(
+                    ap_cost=0, ap_threshold=0, phases=["night", "day", "vote"]
+                ),
             },
             win_conditions=[
                 WinCondition(

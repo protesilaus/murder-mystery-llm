@@ -26,16 +26,26 @@ class ScriptedAgent(Agent):
     def observe(self, observation: AgentObservation) -> None:
         self._last_observation = observation
 
-    def act(self, request: ActionRequest, observation: AgentObservation) -> ActionResponse:
+    def act(
+        self, request: ActionRequest, observation: AgentObservation
+    ) -> ActionResponse:
         phase = observation.phase
         alive = [p.player_id for p in observation.public_state.players if p.alive]
         others = [pid for pid in alive if pid != observation.player_id]
 
         action: object
-        if ActionType.kill in request.allowed_actions and observation.role == Role.murderer and others:
+        if (
+            ActionType.kill in request.allowed_actions
+            and observation.role == Role.murderer
+            and others
+        ):
             target = self._rng.choice(others)
             action = KillAction(target_player_id=target)
-        elif ActionType.investigate in request.allowed_actions and observation.role == Role.detective and others:
+        elif (
+            ActionType.investigate in request.allowed_actions
+            and observation.role == Role.detective
+            and others
+        ):
             target = self._rng.choice(others)
             action = InvestigateAction(target_player_id=target)
         elif ActionType.vote in request.allowed_actions and others:

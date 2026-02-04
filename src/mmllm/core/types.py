@@ -56,6 +56,7 @@ class EventType(str, Enum):
 
 class ExecutionStatus(str, Enum):
     """Current execution state of the game loop."""
+
     idle = "idle"
     querying_llm = "querying_llm"
     waiting_response = "waiting_response"
@@ -170,11 +171,14 @@ class PublicState(IdModel):
 
 class GameStatus(IdModel):
     """Current execution status for real-time UI updates."""
+
     status: ExecutionStatus = ExecutionStatus.idle
     current_actor: Optional[str] = None
     action_description: Optional[str] = None  # Human-readable status message
     request_id: Optional[str] = None  # Link to stored LLM prompt
-    timestamp: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    timestamp: str = Field(
+        default_factory=lambda: datetime.now(timezone.utc).isoformat()
+    )
 
 
 class Visibility(IdModel):
@@ -213,10 +217,14 @@ class PublicMemory(IdModel):
     transcript: List[TranscriptEntry] = Field(default_factory=list)
 
     # Optional: short factual digest per round (engine-generated)
-    event_digests: Dict[int, List[str]] = Field(default_factory=dict)  # round -> bullet facts
+    event_digests: Dict[int, List[str]] = Field(
+        default_factory=dict
+    )  # round -> bullet facts
 
     # Optional: compressed summaries (LLM-generated, but treated as "notes", not facts)
-    round_summaries: Dict[int, List[str]] = Field(default_factory=dict)  # round -> bullets
+    round_summaries: Dict[int, List[str]] = Field(
+        default_factory=dict
+    )  # round -> bullets
 
 
 class PrivateBeliefs(IdModel):
@@ -428,7 +436,9 @@ class ActionResponse(IdModel):
 
     @field_validator("suspicion_scores")
     @classmethod
-    def _v_suspicion_scores(cls, v: Optional[Dict[str, float]]) -> Optional[Dict[str, float]]:
+    def _v_suspicion_scores(
+        cls, v: Optional[Dict[str, float]]
+    ) -> Optional[Dict[str, float]]:
         if v is None:
             return None
         out: Dict[str, float] = {}
