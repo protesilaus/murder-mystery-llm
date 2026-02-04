@@ -28,6 +28,62 @@ from mmllm.game.adjudicator import apply_action
 from mmllm.game.rules import is_game_over, winner
 from mmllm.game.state import GameRuntime
 
+# Constants for prompt optimization
+TRANSCRIPT_WINDOW_SIZE = 8  # Number of recent messages to include in prompts
+
+
+def _sanitize_public_state_for_player(
+    public_state: PublicState, player_id: str
+) -> PublicState:
+    """Create a sanitized copy of public_state for a specific player.
+
+    Removes information that should be private:
+    - Other players' personality controls (deception, risk, etc.)
+    - Other players' social_ap (only show their own)
+    """
+    sanitized_players = []
+    for player in public_state.players:
+        if player.player_id == player_id:
+            # Keep full info for the requesting player
+            sanitized_players.append(player)
+        else:
+            # Sanitize other players - remove controls and AP info
+            sanitized_players.append(
+                PlayerState(
+                    player_id=player.player_id,
+                    alive=player.alive,
+                    social_ap_max=0,  # Hidden from other players
+                    social_ap=0,  # Hidden from other players
+                    controls=Controls(),  # Default/neutral controls (hides personality)
+                )
+            )
+
+    return PublicState(
+        game_id=public_state.game_id,
+        round_num=public_state.round_num,
+        phase=public_state.phase,
+        players=sanitized_players,
+        last_night_kill=public_state.last_night_kill,
+        last_day_eliminated=public_state.last_day_eliminated,
+        current_votes=public_state.current_votes,
+    )
+
+
+def _window_transcript(
+    public_memory: PublicMemory, window_size: int = TRANSCRIPT_WINDOW_SIZE
+) -> PublicMemory:
+    """Create a copy of public_memory with only the last N transcript entries.
+
+    This reduces token usage in prompts while keeping recent context.
+    """
+    windowed_transcript = public_memory.transcript[-window_size:]
+
+    return PublicMemory(
+        transcript=windowed_transcript,
+        event_digests=public_memory.event_digests,
+        round_summaries=public_memory.round_summaries,
+    )
+
 
 class GameEngine:
     def __init__(
@@ -71,6 +127,9 @@ class GameEngine:
                 risk=rng._random.uniform(0.2, 0.9),
                 deception=rng._random.uniform(0.1, 0.8),
                 verbosity=rng._random.uniform(0.3, 0.8),
+                # LLM generation params for conversation diversity
+                temperature=rng._random.uniform(0.5, 1.0),
+                top_p=rng._random.uniform(0.8, 0.95),
             )
             players.append(
                 PlayerState(
@@ -251,13 +310,21 @@ class GameEngine:
         if role is None or memory is None or player is None:
             raise ValueError("unknown player_id")
 
+        # Sanitize public state to remove other players' private info
+        sanitized_public_state = _sanitize_public_state_for_player(
+            self.runtime.public_state, player_id
+        )
+
+        # Window the transcript to reduce token usage
+        windowed_memory = _window_transcript(self.runtime.public_memory)
+
         return AgentObservation(
             game_id=self.runtime.public_state.game_id,
             player_id=player_id,
             round_num=self.runtime.public_state.round_num,
             phase=self.runtime.public_state.phase,
-            public_state=self.runtime.public_state,
-            public_memory=self.runtime.public_memory,
+            public_state=sanitized_public_state,
+            public_memory=windowed_memory,
             role=role,
             private_memory=memory,
             controls=player.controls,

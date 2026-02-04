@@ -89,10 +89,15 @@ class LocalClient(LLMClient):
             }
             self.prompt_callback(request.game_id, request.request_id, prompt_data)
 
+        # Use player-specific temperature and top_p for conversation diversity
         payload = {
             "model": self.model,
             "stream": False,
             "messages": messages,
+            "options": {
+                "temperature": observation.controls.temperature,
+                "top_p": observation.controls.top_p,
+            },
         }
 
         response = post_json(f"{self.base_url}/api/chat", payload)

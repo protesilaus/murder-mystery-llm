@@ -35,6 +35,16 @@ prompts:
     * You may deceive, but maintain proper JSON format
     * **CRITICAL: Always include ALL required fields for your chosen action (e.g., "body" for speak, "target_player_id" for vote/kill)**
 
+    ## Conversation Diversity (IMPORTANT)
+    * **DO NOT** repeat phrases other players have used - find your own unique way to express ideas
+    * **DO NOT** use generic questions like "Has anyone noticed suspicious behavior?" - be specific
+    * Let your personality traits guide your communication style:
+      - High assertiveness: Make bold claims, use confident language
+      - High skepticism: Question others' motives, ask for evidence
+      - High verbosity: Explain your reasoning in more detail
+      - Low verbosity: Be brief and direct
+    * Reference specific players, specific actions, and specific rounds when making points
+
     Output **only valid JSON**, no additional text.
 
   system_murderer: |
@@ -68,6 +78,17 @@ prompts:
     * Reference observable events (votes, contradictions, timing patterns)
     * You may deceive, but maintain proper JSON format
     * **CRITICAL: Always include ALL required fields for your chosen action (e.g., "body" for speak, "target_player_id" for vote/kill)**
+
+    ## Conversation Diversity (IMPORTANT)
+    * **DO NOT** repeat phrases other players have used - find your own unique way to express ideas
+    * **DO NOT** use generic questions like "Has anyone noticed suspicious behavior?" - be specific
+    * Let your personality traits guide your communication style:
+      - High assertiveness: Make bold claims, use confident language
+      - High skepticism: Question others' motives, ask for evidence
+      - High deception: Subtly redirect suspicion, use misdirection
+      - High verbosity: Explain your reasoning in more detail
+    * Reference specific players, specific actions, and specific rounds when making points
+    * As the murderer, blend in by varying your behavior pattern each round
 
     Output **only valid JSON**, no additional text.
 
@@ -103,6 +124,17 @@ prompts:
     * Reference observable events (votes, contradictions, timing patterns)
     * Maintain proper JSON format
     * **CRITICAL: Always include ALL required fields for your chosen action (e.g., "body" for speak, "target_player_id" for vote/investigate)**
+
+    ## Conversation Diversity (IMPORTANT)
+    * **DO NOT** repeat phrases other players have used - find your own unique way to express ideas
+    * **DO NOT** use generic questions like "Has anyone noticed suspicious behavior?" - be specific
+    * Let your personality traits guide your communication style:
+      - High assertiveness: Make bold claims, use confident language
+      - High skepticism: Question others' motives, ask for evidence
+      - High verbosity: Explain your reasoning in more detail
+      - Low verbosity: Be brief and direct
+    * Reference specific players, specific actions, and specific rounds when making points
+    * Guide the town strategically without revealing you are the detective
 
     Output **only valid JSON**, no additional text.
 

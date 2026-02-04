@@ -918,12 +918,36 @@ def get_game_status(game_id: str):
     if engine is None:
         raise HTTPException(status_code=404, detail="Game not found")
 
-    return {
+    public_state = engine.runtime.public_state
+    response = {
         "ok": True,
         "status": engine.runtime.execution_status.model_dump(),
-        "phase": engine.runtime.public_state.phase.value,
-        "round_num": engine.runtime.public_state.round_num,
+        "phase": public_state.phase.value,
+        "round_num": public_state.round_num,
     }
+
+    # Include vote data during vote phase for real-time display
+    if public_state.phase.value == "vote":
+        # Get current votes and tally
+        current_votes = public_state.current_votes
+        vote_tally: dict[str, int] = {}
+        for target in current_votes.values():
+            vote_tally[target] = vote_tally.get(target, 0) + 1
+
+        # Get alive players for context
+        alive_players = [p.player_id for p in public_state.players if p.alive]
+        total_voters = len(alive_players)
+        votes_cast = len(current_votes)
+
+        response["votes"] = {
+            "current_votes": current_votes,  # voter_id -> target_id
+            "vote_tally": vote_tally,  # target_id -> count
+            "votes_cast": votes_cast,
+            "total_voters": total_voters,
+            "alive_players": alive_players,
+        }
+
+    return response
 
 
 @router.get("/{game_id}/prompts/{request_id}")

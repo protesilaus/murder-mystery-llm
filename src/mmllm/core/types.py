@@ -103,6 +103,11 @@ class Controls(IdModel):
     deception: float = Field(0.0, ge=0.0, le=1.0)
     verbosity: float = Field(0.5, ge=0.0, le=1.0)
 
+    # LLM generation parameters for conversation diversity
+    # Each player gets unique values to make responses more varied
+    temperature: float = Field(0.7, ge=0.1, le=1.5)
+    top_p: float = Field(0.9, ge=0.1, le=1.0)
+
 
 class Constraints(IdModel):
     # These are *engine-enforced* turn constraints derived from Controls + seeded RNG.
