@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from datetime import datetime, timezone
 from typing import Iterable, List
-from uuid import uuid4
 
 from mmllm.core.clock import PhaseClock
 from mmllm.core.game_config import GameTypeConfig
+from mmllm.core.rng import RNG
+from mmllm.core.utils import event_id, normalize_player_id, ts_utc
 from mmllm.core.types import (
     ActionResponse,
     AgentObservation,
@@ -27,14 +27,6 @@ from mmllm.core.types import (
 from mmllm.game.adjudicator import apply_action
 from mmllm.game.rules import is_game_over, winner
 from mmllm.game.state import GameRuntime
-
-
-def _ts_utc() -> str:
-    return datetime.now(timezone.utc).isoformat()
-
-
-def _event_id(prefix: str) -> str:
-    return f"{prefix}_{uuid4().hex[:8]}"
 
 
 class GameEngine:
@@ -58,27 +50,27 @@ class GameEngine:
             else self.game_config.player_settings.actions_per_player
         )
 
-        ids = [pid.strip().lower() for pid in player_ids]
+        ids = [normalize_player_id(pid) for pid in player_ids]
         if not ids:
             raise ValueError("player_ids must be non-empty")
 
-        murderer = murderer_id.strip().lower() if murderer_id else ids[0]
+        murderer = normalize_player_id(murderer_id) if murderer_id else ids[0]
         if murderer not in ids:
             raise ValueError("murderer_id must be one of the player_ids")
 
         detective = next((pid for pid in ids if pid != murderer), None)
 
         # Generate random personality for each player
-        import random
+        rng = RNG()
         players = []
         for pid in ids:
             controls = Controls(
-                assertiveness=random.uniform(0.3, 0.9),
-                skepticism=random.uniform(0.3, 0.9),
-                query_rate=random.uniform(0.2, 0.8),
-                risk=random.uniform(0.2, 0.9),
-                deception=random.uniform(0.1, 0.8),
-                verbosity=random.uniform(0.3, 0.8),
+                assertiveness=rng._random.uniform(0.3, 0.9),
+                skepticism=rng._random.uniform(0.3, 0.9),
+                query_rate=rng._random.uniform(0.2, 0.8),
+                risk=rng._random.uniform(0.2, 0.9),
+                deception=rng._random.uniform(0.1, 0.8),
+                verbosity=rng._random.uniform(0.3, 0.8),
             )
             players.append(
                 PlayerState(
@@ -91,7 +83,8 @@ class GameEngine:
         public_state = PublicState(game_id=game_id.strip().lower(), players=players)
         public_memory = PublicMemory()
         private_memories = {
-            pid: PrivateMemory(player_id=pid, round_num=public_state.round_num) for pid in ids
+            pid: PrivateMemory(player_id=pid, round_num=public_state.round_num)
+            for pid in ids
         }
         roles = {}
         for pid in ids:
@@ -170,7 +163,8 @@ class GameEngine:
                 phase=event.phase,
                 speaker_id=speaker_id,
                 body=str(event.payload.get("body", "")),
-                visibility=event.visibility or Visibility(mode="direct", to=[speaker_id, to_player]),
+                visibility=event.visibility
+                or Visibility(mode="direct", to=[speaker_id, to_player]),
             )
             sender_mem = self.runtime.private_memories.get(speaker_id)
             receiver_mem = self.runtime.private_memories.get(to_player)
@@ -226,9 +220,9 @@ class GameEngine:
     def start(self) -> List[GameEvent]:
         events: List[GameEvent] = [
             GameEvent(
-                event_id=_event_id("evt"),
+                event_id=event_id("evt"),
                 game_id=self.runtime.public_state.game_id,
-                ts_utc=_ts_utc(),
+                ts_utc=ts_utc(),
                 event_type=EventType.game_created,
                 round_num=self.runtime.public_state.round_num,
                 phase=self.runtime.public_state.phase,
@@ -237,9 +231,9 @@ class GameEngine:
         self.runtime.public_state.phase = self.runtime.clock.current()
         events.append(
             GameEvent(
-                event_id=_event_id("evt"),
+                event_id=event_id("evt"),
                 game_id=self.runtime.public_state.game_id,
-                ts_utc=_ts_utc(),
+                ts_utc=ts_utc(),
                 event_type=EventType.phase_started,
                 round_num=self.runtime.public_state.round_num,
                 phase=self.runtime.public_state.phase,
@@ -278,9 +272,8 @@ class GameEngine:
         # Check if current phase should reset AP (from config or default day phase behavior)
         phase_name = self.runtime.public_state.phase.value
         phase_config = self.game_config.get_phase_config(phase_name)
-        should_reset_ap = (
-            (phase_config and phase_config.ap_reset)
-            or (phase_config is None and self.runtime.public_state.phase == Phase.day)
+        should_reset_ap = (phase_config and phase_config.ap_reset) or (
+            phase_config is None and self.runtime.public_state.phase == Phase.day
         )
         if should_reset_ap:
             for player in self.runtime.public_state.players:
@@ -289,9 +282,9 @@ class GameEngine:
 
         events = [
             GameEvent(
-                event_id=_event_id("evt"),
+                event_id=event_id("evt"),
                 game_id=self.runtime.public_state.game_id,
-                ts_utc=_ts_utc(),
+                ts_utc=ts_utc(),
                 event_type=EventType.phase_started,
                 round_num=self.runtime.public_state.round_num,
                 phase=self.runtime.public_state.phase,
@@ -307,9 +300,9 @@ class GameEngine:
             self.runtime.public_state.phase = Phase.ended
             events.append(
                 GameEvent(
-                    event_id=_event_id("evt"),
+                    event_id=event_id("evt"),
                     game_id=self.runtime.public_state.game_id,
-                    ts_utc=_ts_utc(),
+                    ts_utc=ts_utc(),
                     event_type=EventType.game_ended,
                     round_num=self.runtime.public_state.round_num,
                     phase=self.runtime.public_state.phase,
@@ -341,9 +334,9 @@ class GameEngine:
         self.runtime.public_state.current_votes.clear()
         events = [
             GameEvent(
-                event_id=_event_id("evt"),
+                event_id=event_id("evt"),
                 game_id=self.runtime.public_state.game_id,
-                ts_utc=_ts_utc(),
+                ts_utc=ts_utc(),
                 event_type=EventType.vote_resolved,
                 round_num=self.runtime.public_state.round_num,
                 phase=self.runtime.public_state.phase,
@@ -353,9 +346,9 @@ class GameEngine:
         if target and target.alive is False:
             events.append(
                 GameEvent(
-                    event_id=_event_id("evt"),
+                    event_id=event_id("evt"),
                     game_id=self.runtime.public_state.game_id,
-                    ts_utc=_ts_utc(),
+                    ts_utc=ts_utc(),
                     event_type=EventType.player_eliminated,
                     round_num=self.runtime.public_state.round_num,
                     phase=self.runtime.public_state.phase,
