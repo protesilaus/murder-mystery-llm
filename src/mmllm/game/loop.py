@@ -294,6 +294,16 @@ class GameLoop:
                     break
             return
 
+        if phase == Phase.analysis:
+            # Analysis phase: players review others and update suspicion
+            self._ensure_step_order()
+            for player_id in self.engine.runtime.turn_order:
+                if player_id in self.agents:
+                    self._apply_agent_action(player_id)
+            self._update_memories()
+            self.engine.advance_phase()
+            return
+
         if phase == Phase.vote:
             self._ensure_step_order()
             for player_id in self.engine.runtime.turn_order:

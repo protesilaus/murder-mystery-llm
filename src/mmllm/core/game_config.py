@@ -99,6 +99,9 @@ class SpecialRules(BaseModel):
     round_1_skip_kill: bool = True
     opening_body_event: bool = True
     investigation_reveal_delay: int = 2
+    # Enable analysis phase before voting where players review others' statements
+    # and update suspicion before casting their vote
+    enable_analysis_phase: bool = False
 
 
 class GameTypeConfig(BaseModel):
@@ -184,6 +187,11 @@ class GameTypeConfig(BaseModel):
                     ap_reset=True,
                 ),
                 PhaseConfig(
+                    name="analysis",
+                    turn_order=TurnOrder.sequential,
+                    end_condition=PhaseEndCondition.all_acted,
+                ),
+                PhaseConfig(
                     name="vote",
                     turn_order=TurnOrder.random,
                     end_condition=PhaseEndCondition.votes_cast,
@@ -213,6 +221,7 @@ class GameTypeConfig(BaseModel):
                 "speak": ActionConfig(ap_cost=1, ap_threshold=1, phases=["day"]),
                 "question": ActionConfig(ap_cost=2, ap_threshold=2, phases=["day"]),
                 "poll": ActionConfig(ap_cost=2, ap_threshold=2, phases=["day"]),
+                "analyze": ActionConfig(ap_cost=0, ap_threshold=0, phases=["analysis"]),
                 "vote": ActionConfig(ap_cost=0, ap_threshold=0, phases=["vote"]),
                 "kill": ActionConfig(ap_cost=0, ap_threshold=0, phases=["night"]),
                 "investigate": ActionConfig(
@@ -223,7 +232,9 @@ class GameTypeConfig(BaseModel):
                     ap_cost=1, ap_threshold=1, phases=["day"]
                 ),
                 "pass": ActionConfig(
-                    ap_cost=0, ap_threshold=0, phases=["night", "day", "vote"]
+                    ap_cost=0,
+                    ap_threshold=0,
+                    phases=["night", "day", "vote", "analysis"],
                 ),
             },
             win_conditions=[

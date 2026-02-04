@@ -283,6 +283,42 @@ def _handle_pass(runtime: GameRuntime, response: ActionResponse) -> List[GameEve
     ]
 
 
+def _handle_analyze(runtime: GameRuntime, response: ActionResponse) -> List[GameEvent]:
+    """Handle analyze action - update suspicion during analysis phase."""
+    action = response.action
+
+    # Update the player's private memory with new suspicion scores
+    player_mem = runtime.private_memories.get(response.player_id)
+    if player_mem and hasattr(action, "updated_suspicion"):
+        # Merge new suspicion values into existing
+        for target_id, score in action.updated_suspicion.items():
+            player_mem.beliefs.suspicion[target_id] = score
+
+        # Update top suspects based on new suspicion
+        sorted_suspicion = sorted(
+            player_mem.beliefs.suspicion.items(),
+            key=lambda x: x[1],
+            reverse=True,
+        )
+        player_mem.beliefs.top_suspects = [pid for pid, _ in sorted_suspicion[:3]]
+
+    # Record vote intention if provided (for analysis/debugging)
+    vote_intention = getattr(action, "vote_intention", None)
+
+    return [
+        _create_game_event(
+            runtime,
+            EventType.memory_updated,
+            actor_id=response.player_id,
+            visibility=Visibility(mode="direct", to=[response.player_id]),
+            payload={
+                "updated_suspicion": getattr(action, "updated_suspicion", {}),
+                "vote_intention": vote_intention,
+            },
+        )
+    ]
+
+
 # --- Action Dispatch Table ---
 
 ActionHandler = Callable[[GameRuntime, ActionResponse], List[GameEvent]]
@@ -294,6 +330,7 @@ _ACTION_HANDLERS: dict[ActionType, ActionHandler] = {
     ActionType.investigate: _handle_investigate,
     ActionType.whisper_send: _handle_whisper,
     ActionType.whisper_reply: _handle_whisper,
+    ActionType.analyze: _handle_analyze,
     ActionType.vote: _handle_vote,
     ActionType.kill: _handle_kill,
     ActionType.pass_turn: _handle_pass,

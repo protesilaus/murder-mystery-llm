@@ -400,6 +400,45 @@ prompts:
     * Consider whether to be truthful or deceptive
     * Your reply is private but could be shared
 
+  action_analyze: |
+    🔍 **ANALYSIS PHASE - REVIEW AND DECIDE**
+
+    You are taking an **analyze** action. This phase happens before voting.
+    Review all players' statements, update your suspicion levels, and decide who to vote for.
+
+    **CRITICAL: Return EXACTLY this JSON structure:**
+    ```json
+    {
+      "request_id": "{request_id}",
+      "game_id": "{game_id}",
+      "player_id": "{player_id}",
+      "round_num": {round_num},
+      "phase": "{phase}",
+      "action": {
+        "type": "analyze",
+        "reasoning_private": "your analysis of each player (max 800 chars)",
+        "updated_suspicion": {
+          "p1": 0.5,
+          "p2": 0.8
+        },
+        "vote_intention": "p#"
+      },
+      "suspicion_scores": {}
+    }
+    ```
+
+    **REQUIRED FIELDS:**
+    - action.type = "analyze"
+    - action.updated_suspicion = map of player_id to suspicion score (0.0-1.0)
+    - action.vote_intention = player ID you plan to vote for (optional)
+
+    **Guidelines:**
+    * Review the transcript carefully - look for contradictions
+    * Consider who has been evasive or overly aggressive
+    * Look at voting patterns from previous rounds
+    * Update suspicion scores based on evidence, not hunches
+    * Your vote_intention should match your highest suspicion
+
   action_pass: |
     You are taking a **pass** action (cost: 0 AP).
     Choose this when you cannot or do not want to take another action.
@@ -470,6 +509,7 @@ prompts:
        - speak: action.type + action.body
        - vote/kill/investigate: action.type + action.target_player_id
        - question/whisper: action.type + action.to_player_id + action.body
+       - analyze: action.type + action.updated_suspicion + action.vote_intention
        - pass: action.type
     4. Do NOT return only the action object
     5. Do NOT use "action_type" - use "type" inside the action object

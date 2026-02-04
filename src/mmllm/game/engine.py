@@ -158,7 +158,15 @@ class GameEngine:
         if phases is not None:
             phase_list = list(phases)
         else:
-            phase_list = [Phase(p.name) for p in self.game_config.phases]
+            phase_list = []
+            for p in self.game_config.phases:
+                # Skip analysis phase if not enabled in special rules
+                if (
+                    p.name == "analysis"
+                    and not self.game_config.special_rules.enable_analysis_phase
+                ):
+                    continue
+                phase_list.append(Phase(p.name))
         clock = PhaseClock(phase_list)
 
         self.runtime = GameRuntime(

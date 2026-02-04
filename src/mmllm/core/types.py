@@ -24,6 +24,7 @@ class Phase(str, Enum):
     setup = "setup"
     night = "night"
     day = "day"
+    analysis = "analysis"  # Optional pre-vote phase for player analysis
     vote = "vote"
     ended = "ended"
 
@@ -35,6 +36,7 @@ class ActionType(str, Enum):
     investigate = "investigate"
     whisper_send = "whisper_send"
     whisper_reply = "whisper_reply"
+    analyze = "analyze"  # Update suspicion based on reviewing other players
     vote = "vote"
     kill = "kill"
     pass_turn = "pass"
@@ -384,6 +386,32 @@ class WhisperReplyAction(ActionBase):
         return cls._lower_id(v)
 
 
+class AnalyzeAction(ActionBase):
+    """Action for the analysis phase - update suspicion and prepare for vote."""
+
+    type: Literal[ActionType.analyze] = ActionType.analyze
+    updated_suspicion: Dict[str, float] = Field(default_factory=dict)
+    vote_intention: Optional[str] = None  # Who they plan to vote for
+
+    @field_validator("updated_suspicion")
+    @classmethod
+    def _v_suspicion(cls, v: Dict[str, float]) -> Dict[str, float]:
+        out: Dict[str, float] = {}
+        for k, val in v.items():
+            k2 = cls._lower_id(k)
+            if not (0.0 <= float(val) <= 1.0):
+                raise ValueError("suspicion values must be in [0,1]")
+            out[k2] = float(val)
+        return out
+
+    @field_validator("vote_intention")
+    @classmethod
+    def _v_vote(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
+        return cls._lower_id(v)
+
+
 class VoteAction(ActionBase):
     type: Literal[ActionType.vote] = ActionType.vote
     target_player_id: str
@@ -416,6 +444,7 @@ AgentAction = Union[
     InvestigateAction,
     WhisperSendAction,
     WhisperReplyAction,
+    AnalyzeAction,
     VoteAction,
     KillAction,
     PassAction,
