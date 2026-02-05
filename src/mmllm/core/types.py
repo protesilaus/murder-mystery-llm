@@ -64,6 +64,7 @@ class ExecutionStatus(str, Enum):
     waiting_response = "waiting_response"
     applying_action = "applying_action"
     phase_transition = "phase_transition"
+    waiting_human = "waiting_human"  # Waiting for human player input
 
 
 # ----------------------------

@@ -5,7 +5,7 @@
   "player_settings": {
     "min_players": 6,
     "max_players": 12,
-    "actions_per_player": 3
+    "actions_per_player": 2
   },
   "phases": [
     {
@@ -67,16 +67,6 @@
       "ap_threshold": 1,
       "phases": ["day"]
     },
-    "question": {
-      "ap_cost": 2,
-      "ap_threshold": 2,
-      "phases": ["day"]
-    },
-    "poll": {
-      "ap_cost": 2,
-      "ap_threshold": 2,
-      "phases": ["day"]
-    },
     "vote": {
       "ap_cost": 0,
       "ap_threshold": 0,
@@ -91,16 +81,6 @@
       "ap_cost": 0,
       "ap_threshold": 0,
       "phases": ["night"]
-    },
-    "whisper_send": {
-      "ap_cost": 1,
-      "ap_threshold": 1,
-      "phases": ["day"]
-    },
-    "whisper_reply": {
-      "ap_cost": 1,
-      "ap_threshold": 1,
-      "phases": ["day"]
     },
     "pass": {
       "ap_cost": 0,
@@ -122,7 +102,7 @@
     }
   ],
   "special_rules": {
-    "round_1_skip_kill": true,
+    "round_1_skip_kill": false,
     "opening_body_event": true,
     "investigation_reveal_delay": 2
   }

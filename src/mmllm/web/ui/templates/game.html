@@ -56,6 +56,68 @@
           <div class="vote-tally" id="vote-tally"></div>
           <div class="vote-details" id="vote-details"></div>
         </div>
+        <!-- Human Player Action Panel -->
+        <div class="human-action-panel" id="human-action-panel" style="display: none;">
+          <div class="human-action-header">
+            <span class="human-turn-icon">🎮</span>
+            <h3>Your Turn!</h3>
+            <span class="human-phase-info">
+              Phase: <strong id="human-phase">—</strong> |
+              AP: <strong id="human-ap">—</strong>
+            </span>
+          </div>
+          <div class="human-action-buttons" id="human-action-buttons">
+            <button class="btn action-btn" data-action="speak">💬 Speak</button>
+            <button class="btn action-btn" data-action="question">❓ Question</button>
+            <button class="btn action-btn" data-action="vote">🗳️ Vote</button>
+            <button class="btn action-btn" data-action="investigate">🔍 Investigate</button>
+            <button class="btn action-btn" data-action="kill">🗡️ Kill</button>
+            <button class="btn action-btn" data-action="pass">⏭️ Pass</button>
+          </div>
+          <div class="human-action-form" id="human-action-form" style="display: none;">
+            <div class="human-form-speak" id="human-form-speak" style="display: none;">
+              <label class="field">
+                <span class="field-label">What do you want to say?</span>
+                <textarea class="input textarea" id="human-speak-body" rows="3" placeholder="Type your message..."></textarea>
+              </label>
+            </div>
+            <div class="human-form-question" id="human-form-question" style="display: none;">
+              <label class="field">
+                <span class="field-label">Who do you want to question?</span>
+                <select class="input select" id="human-question-target"></select>
+              </label>
+              <label class="field">
+                <span class="field-label">Your question</span>
+                <textarea class="input textarea" id="human-question-body" rows="2" placeholder="What do you want to ask?"></textarea>
+              </label>
+            </div>
+            <div class="human-form-vote" id="human-form-vote" style="display: none;">
+              <label class="field">
+                <span class="field-label">Who do you vote to eliminate?</span>
+                <select class="input select" id="human-vote-target"></select>
+              </label>
+            </div>
+            <div class="human-form-investigate" id="human-form-investigate" style="display: none;">
+              <label class="field">
+                <span class="field-label">Who do you want to investigate?</span>
+                <select class="input select" id="human-investigate-target"></select>
+              </label>
+            </div>
+            <div class="human-form-kill" id="human-form-kill" style="display: none;">
+              <label class="field">
+                <span class="field-label">Who is your target?</span>
+                <select class="input select" id="human-kill-target"></select>
+              </label>
+            </div>
+            <div class="human-form-pass" id="human-form-pass" style="display: none;">
+              <p class="human-pass-message">You will pass your turn without taking action.</p>
+            </div>
+            <div class="human-action-submit">
+              <button class="btn ghost" id="human-action-cancel">Cancel</button>
+              <button class="btn primary" id="human-action-submit">Submit Action</button>
+            </div>
+          </div>
+        </div>
         <div class="narrator-section" id="narrator-section" style="display: none;">
           <div class="ai-chat-header">
             <h3>Narrator Text</h3>

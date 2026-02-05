@@ -3,49 +3,49 @@
     "players": [
       {
         "player_id": "p1",
-        "display_name": "Pixie",
+        "display_name": "LaserQueen",
         "character_name": "",
         "score": 0
       },
       {
         "player_id": "p2",
-        "display_name": "Specter",
+        "display_name": "Starblade",
         "character_name": "",
         "score": 0
       },
       {
         "player_id": "p3",
-        "display_name": "Vandal",
+        "display_name": "DarthVader22",
         "character_name": "",
         "score": 0
       },
       {
         "player_id": "p4",
-        "display_name": "Rampager",
+        "display_name": "GalacticGuru",
         "character_name": "",
         "score": 0
       },
       {
         "player_id": "p5",
-        "display_name": "Bruiser",
+        "display_name": "CosmicCrusher",
         "character_name": "",
         "score": 0
       },
       {
         "player_id": "p6",
-        "display_name": "Gizmo",
+        "display_name": "NovaSpiker",
         "character_name": "",
         "score": 0
       },
       {
         "player_id": "p7",
-        "display_name": "Spark",
+        "display_name": "RocketRampage",
         "character_name": "",
         "score": 0
       },
       {
         "player_id": "p8",
-        "display_name": "Kairos",
+        "display_name": "AsteroidAce",
         "character_name": "",
         "score": 0
       }

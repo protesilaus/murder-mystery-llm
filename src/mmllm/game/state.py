@@ -66,6 +66,7 @@ class GameRuntime:
     pending_reveals: List[dict] = field(default_factory=list)
     game_config: GameTypeConfig | None = None
     execution_status: GameStatus = field(default_factory=GameStatus)
+    human_player_id: str | None = None  # Player ID controlled by human
 
     # Grouped state fields
     turn_state: TurnState = field(default_factory=TurnState)

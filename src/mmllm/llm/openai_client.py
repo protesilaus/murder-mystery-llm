@@ -63,6 +63,16 @@ class OpenAIClient(LLMClient):
             base_url=base_url or os.getenv("OPENAI_BASE_URL"),
         )
 
+    def _sampling_args(self, observation: AgentObservation) -> dict:
+        if self.model.startswith("gpt-5"):
+            return {}
+        if os.getenv("OPENAI_DISABLE_SAMPLING") == "1":
+            return {}
+        return {
+            "temperature": observation.controls.temperature,
+            "top_p": observation.controls.top_p,
+        }
+
     def generate_action(
         self,
         request: ActionRequest,
@@ -104,8 +114,7 @@ class OpenAIClient(LLMClient):
         request_args = {
             "model": self.model,
             "messages": messages,
-            "temperature": observation.controls.temperature,
-            "top_p": observation.controls.top_p,
+            **self._sampling_args(observation),
         }
         if self.service_tier:
             request_args["service_tier"] = self.service_tier
@@ -133,8 +142,7 @@ class OpenAIClient(LLMClient):
             retry_args = {
                 "model": self.model,
                 "messages": messages,
-                "temperature": observation.controls.temperature,
-                "top_p": observation.controls.top_p,
+                **self._sampling_args(observation),
             }
             if self.service_tier:
                 retry_args["service_tier"] = self.service_tier

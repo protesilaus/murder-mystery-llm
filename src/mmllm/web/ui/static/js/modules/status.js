@@ -2,6 +2,9 @@
  * Game status monitoring and display
  */
 
+import { updateHumanPanel } from './human.js';
+import { state } from './state.js';
+
 let statusPollInterval = null;
 
 export function startStatusPolling(gameId, statusUpdateCallback, voteUpdateCallback) {
@@ -19,6 +22,10 @@ export function startStatusPolling(gameId, statusUpdateCallback, voteUpdateCallb
       // Handle vote data if present
       if (payload.ok && voteUpdateCallback) {
         updateVoteDisplay(payload.phase, payload.votes);
+      }
+      // Update human action panel if this is a human turn
+      if (payload.ok) {
+        updateHumanPanel(payload, state.lastSnapshot?.public_state);
       }
     } catch (error) {
       console.error("Status polling error:", error);
@@ -70,6 +77,12 @@ export function updateStatusDisplay(status) {
       text: "Phase transition",
       showPrompt: false,
       className: ""
+    },
+    waiting_human: {
+      icon: "🎮",
+      text: "Your turn! Choose an action below.",
+      showPrompt: false,
+      className: "human-turn"
     },
   };
 

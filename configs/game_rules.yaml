@@ -1,6 +1,6 @@
 game:
-  min_players: 6
-  max_players: 12
+  min_players: 10
+  max_players: 20
   mafia_count: auto
   phases:
     - night

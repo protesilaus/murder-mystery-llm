@@ -57,6 +57,7 @@ class CreateGameRequest(BaseModel):
     game_id: Optional[str] = None
     player_ids: Optional[List[str]] = None
     murderer_id: Optional[str] = None
+    human_player_id: Optional[str] = None  # Player ID for human-controlled player
     agent_type: str = Field("scripted", description="scripted, ollama, or openai")
     ollama_base_url: str = "http://127.0.0.1:11434"
     ollama_model: str = "llama3.1:8b"
@@ -66,6 +67,12 @@ class CreateGameRequest(BaseModel):
     )
     openai_api_key: Optional[str] = None  # If not provided, will use OPENAI_API_KEY from env
     openai_base_url: Optional[str] = None  # If not provided, will use OPENAI_BASE_URL from env
+
+
+class HumanActionRequest(BaseModel):
+    """Request body for human player action submission."""
+    action_type: str
+    details: Optional[Dict] = None
 
 
 class RunGameRequest(BaseModel):
@@ -177,6 +184,19 @@ def create_game(
         _DISPLAY_NAMES[engine.runtime.public_state.game_id] = {
             pid: display_lookup.get(pid, pid) or pid for pid in player_ids
         }
+
+        # Store human player ID if provided
+        human_pid = None
+        if data.human_player_id:
+            human_pid = data.human_player_id.strip().lower()
+            if human_pid in player_ids:
+                engine.runtime.human_player_id = human_pid
+            else:
+                logger.warning(
+                    "human_player_id=%s not in player_ids, ignoring", human_pid
+                )
+                human_pid = None
+
         if data.agent_type == "ollama":
             templates = load_prompt_templates()
             client = LocalClient(
@@ -187,7 +207,9 @@ def create_game(
                 prompt_callback=_store_prompt,
             )
             agents: Dict[str, Agent] = {
-                pid: LLMAgent(client, system_prompt="") for pid in player_ids
+                pid: LLMAgent(client, system_prompt="")
+                for pid in player_ids
+                if pid != human_pid  # Skip human player
             }
             summary_client = LocalClient(
                 data.ollama_base_url,
@@ -211,7 +233,9 @@ def create_game(
                 prompt_callback=_store_prompt,
             )
             agents: Dict[str, Agent] = {
-                pid: LLMAgent(client, system_prompt="") for pid in player_ids
+                pid: LLMAgent(client, system_prompt="")
+                for pid in player_ids
+                if pid != human_pid  # Skip human player
             }
             summary_client = OpenAIClient(
                 model=data.openai_model,
@@ -227,7 +251,9 @@ def create_game(
             )
         else:
             agents = {
-                pid: ScriptedAgent(seed=idx) for idx, pid in enumerate(player_ids)
+                pid: ScriptedAgent(seed=idx)
+                for idx, pid in enumerate(player_ids)
+                if pid != human_pid  # Skip human player
             }
             _SUMMARY_AGENTS[engine.runtime.public_state.game_id] = None
         _AGENTS[engine.runtime.public_state.game_id] = agents
@@ -236,6 +262,7 @@ def create_game(
             "game_id": engine.runtime.public_state.game_id,
             "phase": engine.runtime.public_state.phase,
             "round_num": engine.runtime.public_state.round_num,
+            "human_player_id": engine.runtime.human_player_id,
         }
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=500, detail=str(exc)) from exc
@@ -810,6 +837,182 @@ def force_action(game_id: str, request: Request, payload: ForceActionRequest):
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
+@router.post("/{game_id}/human-action")
+def submit_human_action(game_id: str, request: Request, payload: HumanActionRequest):
+    """Submit action for the human-controlled player."""
+    from mmllm.core.types import ExecutionStatus
+
+    engine = _GAMES.get(game_id)
+    if engine is None:
+        raise HTTPException(status_code=404, detail="Game not found")
+
+    runtime = engine.runtime
+
+    # Validate we have a human player
+    human_pid = runtime.human_player_id
+    if not human_pid:
+        raise HTTPException(status_code=400, detail="No human player in this game")
+
+    # Validate we're waiting for human input
+    if runtime.execution_status.status != ExecutionStatus.waiting_human:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Not waiting for human input (current status: {runtime.execution_status.status.value})",
+        )
+
+    # Validate it's the human's turn
+    current_actor = runtime.execution_status.current_actor
+    if current_actor != human_pid:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Not the human player's turn (current actor: {current_actor})",
+        )
+
+    try:
+        # Validate player exists and is alive
+        player = runtime.get_player(human_pid)
+        if player is None:
+            raise HTTPException(status_code=404, detail=f"Player {human_pid} not found")
+        if not player.alive:
+            raise HTTPException(status_code=400, detail=f"Player {human_pid} is not alive")
+
+        # Build action (reuse force-action logic)
+        details = payload.details or {}
+        action_type_str = payload.action_type.strip().lower()
+
+        try:
+            action_type_enum = ActionType(action_type_str)
+        except ValueError:
+            allowed = ", ".join([t.value for t in ActionType])
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid action_type '{action_type_str}'. Allowed: {allowed}",
+            )
+
+        # Check if action is legal
+        allowed_actions = legal_actions(runtime, human_pid)
+        if action_type_enum not in allowed_actions:
+            allowed_strs = ", ".join([a.value for a in allowed_actions])
+            raise HTTPException(
+                status_code=400,
+                detail=f"Action '{action_type_str}' not allowed. Allowed: {allowed_strs}",
+            )
+
+        # Build action object
+        if action_type_enum == ActionType.speak:
+            if "body" not in details:
+                raise HTTPException(status_code=400, detail="Missing 'body' field for speak action")
+            action = SpeakAction(body=str(details["body"]))
+        elif action_type_enum == ActionType.question:
+            if "to_player_id" not in details or "body" not in details:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Missing 'to_player_id' or 'body' field for question action",
+                )
+            action = QuestionAction(
+                to_player_id=str(details["to_player_id"]), body=str(details["body"])
+            )
+        elif action_type_enum == ActionType.poll:
+            if "body" not in details:
+                raise HTTPException(status_code=400, detail="Missing 'body' field for poll action")
+            action = PollAction(body=str(details["body"]))
+        elif action_type_enum == ActionType.vote:
+            if "target_player_id" not in details:
+                raise HTTPException(
+                    status_code=400, detail="Missing 'target_player_id' field for vote action"
+                )
+            action = VoteAction(target_player_id=str(details["target_player_id"]))
+        elif action_type_enum == ActionType.kill:
+            if "target_player_id" not in details:
+                raise HTTPException(
+                    status_code=400, detail="Missing 'target_player_id' field for kill action"
+                )
+            action = KillAction(target_player_id=str(details["target_player_id"]))
+        elif action_type_enum == ActionType.investigate:
+            if "target_player_id" not in details:
+                raise HTTPException(
+                    status_code=400, detail="Missing 'target_player_id' field for investigate action"
+                )
+            action = InvestigateAction(target_player_id=str(details["target_player_id"]))
+        elif action_type_enum == ActionType.pass_turn:
+            action = PassAction(note=details.get("note", ""))
+        else:
+            raise HTTPException(status_code=400, detail=f"Action type '{action_type_str}' not supported")
+
+        # Create ActionResponse
+        action_response = ActionResponse(
+            request_id=f"human_{uuid4().hex[:8]}",
+            game_id=engine.runtime.public_state.game_id,
+            player_id=human_pid,
+            round_num=engine.runtime.public_state.round_num,
+            phase=engine.runtime.public_state.phase,
+            action=action,
+        )
+
+        # Apply action
+        before = len(engine.runtime.event_history)
+        engine.apply_action(action_response)
+        new_events = engine.runtime.event_history[before:]
+
+        # Record events
+        _append_game_events(request, game_id, new_events)
+
+        # Reset status to idle and advance turn
+        # (turn_index was decremented in GameLoop when we set waiting_human)
+        from mmllm.core.types import GameStatus
+        runtime.execution_status = GameStatus(status=ExecutionStatus.idle)
+        runtime.turn_index += 1  # Advance to next player
+
+        logger.info(
+            "human_action applied game_id=%s player_id=%s action_type=%s new_events=%s",
+            game_id,
+            human_pid,
+            action_type_str,
+            len(new_events),
+        )
+
+        # Continue running AI turns until next human turn or game ends
+        from mmllm.game.rules import is_game_over
+        agents = _AGENTS.get(game_id, {})
+        summary_agent = _SUMMARY_AGENTS.get(game_id)
+        loop = GameLoop(engine, agents, summary_agent=summary_agent)
+
+        # Run step_action until we hit waiting_human again or game ends
+        max_iterations = 100  # Safety limit
+        for _ in range(max_iterations):
+            if is_game_over(engine.runtime):
+                break
+            before_step = len(engine.runtime.event_history)
+            loop.step_action()
+            step_events = engine.runtime.event_history[before_step:]
+            new_events.extend(step_events)
+            _append_game_events(request, game_id, step_events)
+
+            # Check if we're now waiting for human again
+            if runtime.execution_status.status == ExecutionStatus.waiting_human:
+                break
+
+        logger.info(
+            "human_action continuation complete game_id=%s total_events=%s final_status=%s",
+            game_id,
+            len(new_events),
+            runtime.execution_status.status.value,
+        )
+
+        return {
+            "ok": True,
+            "player_id": human_pid,
+            "action_type": action_type_str,
+            "public_state": engine.runtime.public_state.model_dump(),
+            "events": [evt.model_dump() for evt in new_events],
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("human_action failed game_id=%s", game_id)
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
 @router.get("/{game_id}/players/{player_id}/knowledge")
 def get_player_knowledge(game_id: str, player_id: str):
     """Get a player's knowledge context (beliefs, suspicions, plan)."""
@@ -947,17 +1150,37 @@ def preview_next_action(game_id: str):
 @router.get("/{game_id}/status")
 def get_game_status(game_id: str):
     """Get current execution status for real-time UI updates."""
+    from mmllm.core.types import ExecutionStatus
+
     engine = _GAMES.get(game_id)
     if engine is None:
         raise HTTPException(status_code=404, detail="Game not found")
 
     public_state = engine.runtime.public_state
+    runtime = engine.runtime
+
+    # Check if waiting for human input
+    is_human_turn = (
+        runtime.execution_status.status == ExecutionStatus.waiting_human
+        and runtime.human_player_id is not None
+    )
+
     response = {
         "ok": True,
-        "status": engine.runtime.execution_status.model_dump(),
+        "status": runtime.execution_status.model_dump(),
         "phase": public_state.phase.value,
         "round_num": public_state.round_num,
+        "human_player_id": runtime.human_player_id,
+        "is_human_turn": is_human_turn,
     }
+
+    # Include allowed actions when it's the human's turn
+    if is_human_turn:
+        allowed = legal_actions(runtime, runtime.human_player_id)
+        response["allowed_actions"] = [a.value for a in allowed]
+        player = runtime.get_player(runtime.human_player_id)
+        if player:
+            response["human_ap"] = player.social_ap
 
     # Include vote data during vote phase for real-time display
     if public_state.phase.value == "vote":

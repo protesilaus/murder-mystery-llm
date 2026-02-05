@@ -108,6 +108,18 @@ class GameLoop:
     def _apply_agent_action(self, player_id: str) -> ActionResponse | None:
         runtime = self.engine.runtime
 
+        # Check if this is the human player
+        if runtime.human_player_id and player_id == runtime.human_player_id:
+            # Set status to waiting for human input
+            runtime.execution_status = GameStatus(
+                status=ExecutionStatus.waiting_human,
+                current_actor=player_id,
+                action_description=f"Waiting for {player_id}'s action (human player)",
+            )
+            logger.info("Waiting for human player action: player=%s", player_id)
+            # Return None to indicate we need to wait for human input
+            return None
+
         # Update: Requesting action
         runtime.execution_status = GameStatus(
             status=ExecutionStatus.querying_llm,
@@ -385,12 +397,17 @@ class GameLoop:
         if phase == Phase.night and is_round_1 and skip_kill_round_1:
             runtime = self.engine.runtime
             detective_id = runtime.detective_id
-            if (
+            # Check if detective needs to act (either has agent or is human)
+            detective_can_act = (
                 detective_id
                 and not runtime.night1_investigation_done
-                and detective_id in self.agents
-            ):
+                and (detective_id in self.agents or detective_id == runtime.human_player_id)
+            )
+            if detective_can_act:
                 self._apply_agent_action(detective_id)
+                # If waiting for human detective, don't mark as done yet
+                if runtime.execution_status.status == ExecutionStatus.waiting_human:
+                    return self.engine.runtime.event_history[before:]
                 runtime.night1_investigation_done = True
                 return self.engine.runtime.event_history[before:]
             if not runtime.night1_body_emitted:
@@ -412,6 +429,11 @@ class GameLoop:
                 return self.engine.runtime.event_history[before:]
             runtime.free_reply_player_id = target_id
             self._apply_agent_action(target_id)
+
+            # If waiting for human to respond to question, don't clear state
+            if runtime.execution_status.status == ExecutionStatus.waiting_human:
+                return self.engine.runtime.event_history[before:]
+
             runtime.free_reply_player_id = None
             runtime.pending_question_from = None
             runtime.pending_question_to = None
@@ -439,11 +461,22 @@ class GameLoop:
                 self.engine.advance_phase()
                 if runtime.public_state.phase == Phase.day:
                     self._on_day_start()
-            return self.engine.runtime.event_history[before:]
+                return self.engine.runtime.event_history[before:]
+            # For day phase, reset turn_index to start a new cycle instead of returning
+            if phase == Phase.day:
+                runtime.turn_index = 0
+                runtime.cycle_passes.clear()
+            else:
+                return self.engine.runtime.event_history[before:]
 
         player_id = runtime.turn_order[runtime.turn_index]
         runtime.turn_index += 1
         response = self._apply_agent_action(player_id)
+
+        # If waiting for human input, don't advance turn - revert the index
+        if runtime.execution_status.status == ExecutionStatus.waiting_human:
+            runtime.turn_index -= 1
+            return self.engine.runtime.event_history[before:]
 
         if phase == Phase.day:
             if response and response.action.type == ActionType.pass_turn:

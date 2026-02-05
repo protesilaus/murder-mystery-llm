@@ -23,6 +23,7 @@ import {
   sendInterject,
 } from './modules/controls.js';
 import { startStatusPolling, stopStatusPolling, updateStatusDisplay, updateVoteDisplay } from './modules/status.js';
+import { initHumanModule } from './modules/human.js';
 
 (() => {
   // Element references
@@ -33,6 +34,7 @@ import { startStatusPolling, stopStatusPolling, updateStatusDisplay, updateVoteD
   const activeCount = document.getElementById("active-count");
   const createButton = document.getElementById("create-game");
   const agentTypeSelect = document.getElementById("agent-type");
+  const humanPlayerSelect = document.getElementById("human-player-select");
   const refreshButton = document.getElementById("refresh-game");
   const runRoundButton = document.getElementById("run-round");
   const timeline = document.getElementById("timeline");
@@ -235,6 +237,18 @@ import { startStatusPolling, stopStatusPolling, updateStatusDisplay, updateVoteD
       row.appendChild(scoreCol);
       partyList.appendChild(row);
     });
+
+    // Also populate the human player dropdown
+    if (humanPlayerSelect) {
+      humanPlayerSelect.innerHTML = '<option value="">Watch (Observer)</option>';
+      players.forEach((player) => {
+        const option = document.createElement("option");
+        option.value = player.player_id;
+        const displayName = player.display_name || player.character_name || player.player_id;
+        option.textContent = `Play as ${displayName} (${player.player_id})`;
+        humanPlayerSelect.appendChild(option);
+      });
+    }
   };
 
   const collectParty = () => {
@@ -331,14 +345,19 @@ import { startStatusPolling, stopStatusPolling, updateStatusDisplay, updateVoteD
     createButton.textContent = "Starting...";
     console.info("[createGame] POST /games");
     try {
+      const humanPlayerId = humanPlayerSelect?.value || null;
+      const requestBody = {
+        agent_type: agentTypeSelect?.value || "ollama",
+      };
+      if (humanPlayerId) {
+        requestBody.human_player_id = humanPlayerId;
+      }
       const response = await fetch("/games", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          agent_type: agentTypeSelect?.value || "ollama",
-        }),
+        body: JSON.stringify(requestBody),
       });
       const contentType = response.headers.get("content-type") || "";
       const rawBody = contentType.includes("application/json")
@@ -531,6 +550,9 @@ import { startStatusPolling, stopStatusPolling, updateStatusDisplay, updateVoteD
 
   checkHealth();
   fetchGames();
+
+  // Initialize human player module (for game page)
+  initHumanModule();
 
   // Cleanup on page unload
   window.addEventListener("beforeunload", () => {
