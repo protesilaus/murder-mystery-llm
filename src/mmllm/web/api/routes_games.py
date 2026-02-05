@@ -60,7 +60,10 @@ class CreateGameRequest(BaseModel):
     agent_type: str = Field("scripted", description="scripted, ollama, or openai")
     ollama_base_url: str = "http://127.0.0.1:11434"
     ollama_model: str = "llama3.1:8b"
-    openai_model: str = "gpt-3.5-turbo"
+    openai_model: str = "gpt-5-nano"
+    openai_service_tier: Optional[str] = Field(
+        "flex", description="OpenAI service tier (auto or flex)"
+    )
     openai_api_key: Optional[str] = None  # If not provided, will use OPENAI_API_KEY from env
     openai_base_url: Optional[str] = None  # If not provided, will use OPENAI_BASE_URL from env
 
@@ -202,6 +205,7 @@ def create_game(
                 model=data.openai_model,
                 api_key=data.openai_api_key,
                 base_url=data.openai_base_url,
+                service_tier=data.openai_service_tier,
                 system_prompt=templates.system_town,
                 user_prompt=templates.user,
                 prompt_callback=_store_prompt,
@@ -213,6 +217,7 @@ def create_game(
                 model=data.openai_model,
                 api_key=data.openai_api_key,
                 base_url=data.openai_base_url,
+                service_tier=data.openai_service_tier,
                 prompt_callback=_store_prompt,
             )
             _SUMMARY_AGENTS[engine.runtime.public_state.game_id] = SummaryAgent(

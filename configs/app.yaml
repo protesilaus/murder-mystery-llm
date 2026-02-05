@@ -6,4 +6,5 @@ app:
 
 llm:
   provider: openai
-  model: gpt-4.1-mini
+  model: gpt-5-nano
+  service_tier: flex

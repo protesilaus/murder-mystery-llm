@@ -40,12 +40,14 @@ class OpenAIClient(LLMClient):
         model: str = "gpt-4o-mini",
         api_key: str | None = None,
         base_url: str | None = None,
+        service_tier: str | None = None,
         *,
         system_prompt: str | None = None,
         user_prompt: str | None = None,
         prompt_callback: Callable[[str, str, dict], None] | None = None,
     ) -> None:
         self.model = model
+        self.service_tier = service_tier or os.getenv("OPENAI_SERVICE_TIER")
         self.templates = load_prompt_templates()
         self.system_prompt = system_prompt or self.templates.system_town
         self.user_prompt = user_prompt or self.templates.user
@@ -99,11 +101,16 @@ class OpenAIClient(LLMClient):
             self.prompt_callback(request.game_id, request.request_id, prompt_data)
 
         # Call OpenAI API with extended timeout
+        request_args = {
+            "model": self.model,
+            "messages": messages,
+            "temperature": observation.controls.temperature,
+            "top_p": observation.controls.top_p,
+        }
+        if self.service_tier:
+            request_args["service_tier"] = self.service_tier
         response = self.client.with_options(timeout=120.0).chat.completions.create(
-            model=self.model,
-            messages=messages,
-            temperature=observation.controls.temperature,
-            top_p=observation.controls.top_p,
+            **request_args
         )
 
         content = response.choices[0].message.content or ""
@@ -123,11 +130,16 @@ class OpenAIClient(LLMClient):
             retry_prompt = _build_retry_prompt(detected_type, request)
             messages.append({"role": "assistant", "content": content})
             messages.append({"role": "user", "content": retry_prompt})
+            retry_args = {
+                "model": self.model,
+                "messages": messages,
+                "temperature": observation.controls.temperature,
+                "top_p": observation.controls.top_p,
+            }
+            if self.service_tier:
+                retry_args["service_tier"] = self.service_tier
             retry_response = self.client.with_options(timeout=120.0).chat.completions.create(
-                model=self.model,
-                messages=messages,
-                temperature=observation.controls.temperature,
-                top_p=observation.controls.top_p,
+                **retry_args
             )
             retry_content = retry_response.choices[0].message.content or ""
             retry_action, retry_error, _ = _parse_action(retry_content)
@@ -171,9 +183,11 @@ class OpenAIClient(LLMClient):
             system_prompt or self.summary_system,
             user_prompt or self.summary_user,
         )
+        summary_args = {"model": self.model, "messages": messages}
+        if self.service_tier:
+            summary_args["service_tier"] = self.service_tier
         response = self.client.with_options(timeout=120.0).chat.completions.create(
-            model=self.model,
-            messages=messages,
+            **summary_args
         )
         return response.choices[0].message.content or ""
 
@@ -190,9 +204,11 @@ class OpenAIClient(LLMClient):
             system_prompt or self.memory_update_system,
             user_prompt or self.memory_update_user,
         )
+        memory_args = {"model": self.model, "messages": messages}
+        if self.service_tier:
+            memory_args["service_tier"] = self.service_tier
         response = self.client.with_options(timeout=120.0).chat.completions.create(
-            model=self.model,
-            messages=messages,
+            **memory_args
         )
         content = response.choices[0].message.content or ""
         return _parse_memory_update(content)
@@ -224,9 +240,11 @@ class OpenAIClient(LLMClient):
             {"role": "user", "content": user_message},
         ]
 
+        response_args = {"model": self.model, "messages": messages}
+        if self.service_tier:
+            response_args["service_tier"] = self.service_tier
         response = self.client.with_options(timeout=120.0).chat.completions.create(
-            model=self.model,
-            messages=messages,
+            **response_args
         )
         return response.choices[0].message.content or ""
 

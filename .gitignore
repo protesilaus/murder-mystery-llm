@@ -19,3 +19,4 @@ runs/*
 # IDE
 .vscode/
 .idea/
+logs/server.log
