@@ -454,6 +454,24 @@ code {
   box-shadow: 0 0 0 1px rgba(212, 74, 74, 0.35);
 }
 
+.player-card.eliminated {
+  opacity: 0.5;
+  padding: 0.35rem 0.5rem;
+  font-size: 0.85rem;
+  background: rgba(18, 24, 33, 0.5);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.player-card.eliminated .player-icon {
+  width: 20px;
+  height: 20px;
+  font-size: 0.75rem;
+}
+
+.player-card.eliminated strong {
+  font-size: 0.85rem;
+}
+
 .player-meta {
   font-size: 0.85rem;
   color: var(--muted);

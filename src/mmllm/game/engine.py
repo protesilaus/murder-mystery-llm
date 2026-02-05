@@ -430,5 +430,21 @@ class GameEngine:
                     payload={"player_id": target_id},
                 )
             )
+
+        # Check for win conditions after elimination
+        if is_game_over(self.runtime):
+            self.runtime.public_state.phase = Phase.ended
+            events.append(
+                GameEvent(
+                    event_id=event_id("evt"),
+                    game_id=self.runtime.public_state.game_id,
+                    ts_utc=ts_utc(),
+                    event_type=EventType.game_ended,
+                    round_num=self.runtime.public_state.round_num,
+                    phase=self.runtime.public_state.phase,
+                    payload={"winner": winner(self.runtime)},
+                )
+            )
+
         self.runtime.event_history.extend(events)
         return events

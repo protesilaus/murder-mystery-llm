@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import json
+import logging
 from datetime import datetime, timezone
 from typing import Dict, List
 from uuid import uuid4
+
+logger = logging.getLogger(__name__)
 
 from mmllm.agents.base import Agent
 from mmllm.agents.llm_agent import LLMAgent
@@ -134,10 +137,36 @@ class GameLoop:
         runtime.execution_status.status = ExecutionStatus.applying_action
         runtime.execution_status.action_description = f"Applying {player_id}'s action"
 
+        # DEBUG: Log the action being attempted
+        logger.info(
+            "Applying action: player=%s action_type=%s",
+            player_id,
+            response.action.type.value,
+        )
+
         try:
-            self.engine.apply_action(response)
+            events = self.engine.apply_action(response)
+            logger.info(
+                "Action applied successfully: player=%s action_type=%s events_created=%d",
+                player_id,
+                response.action.type.value,
+                len(events),
+            )
             return response
-        except ValueError:
+        except ValueError as exc:
+            logger.warning(
+                "Action failed with ValueError: player=%s action_type=%s error=%s",
+                player_id,
+                response.action.type.value,
+                str(exc),
+            )
+            return None
+        except Exception as exc:
+            logger.exception(
+                "Action failed with unexpected exception: player=%s action_type=%s",
+                player_id,
+                response.action.type.value,
+            )
             return None
         finally:
             # Reset to idle

@@ -15,6 +15,13 @@ prompts:
     3. **Phases**: `night` (murderer kills), `day` (discussion/actions), `vote` (vote to eliminate)
     4. You have `ap_available` action points and `allowed_actions` — if you can't afford an action, use `pass`
 
+    ## Suspicion Scores
+    * Your `private_memory.beliefs.suspicion` contains YOUR assessment of how suspicious each player is
+    * **Scale**: 0.0 (completely trust/innocent) to 1.0 (highly suspicious/likely murderer)
+    * **Higher score = more suspicious** - use these to guide your votes and investigations
+    * These are YOUR private beliefs - other players cannot see them
+    * Update these scores based on observable behavior, contradictions, and voting patterns
+
     ## Communication
     * Keep messages focused: one claim or question per message
     * Reference observable events (votes, contradictions, timing patterns)
@@ -39,6 +46,13 @@ prompts:
     2. Only use information from the provided observation
     3. **Phases**: `night` (murderer kills), `day` (discussion/actions), `vote` (vote to eliminate)
     4. You have `ap_available` action points and `allowed_actions` — if you can't afford an action, use `pass`
+
+    ## Suspicion Scores
+    * Your `private_memory.beliefs.suspicion` tracks how suspicious other players appear to YOU
+    * **Scale**: 0.0 (completely trust/innocent) to 1.0 (highly suspicious/likely murderer)
+    * **Higher score = more suspicious** - manipulate these to deflect attention from yourself
+    * Act concerned about players YOU vote as suspicious to appear like an innocent townsperson
+    * These are YOUR private beliefs - other players cannot see them
 
     ## Communication
     * Keep messages focused: one claim or question per message
@@ -66,6 +80,13 @@ prompts:
     2. Only use information from the provided observation
     3. **Phases**: `night` (investigate), `day` (discussion/actions), `vote` (vote to eliminate)
     4. You have `ap_available` action points and `allowed_actions` — if you can't afford an action, use `pass`
+
+    ## Suspicion Scores
+    * Your `private_memory.beliefs.suspicion` contains YOUR assessment of how suspicious each player is
+    * **Scale**: 0.0 (completely trust/innocent) to 1.0 (highly suspicious/likely murderer)
+    * **Higher score = more suspicious** - use these to guide your investigations and votes
+    * Prioritize investigating players with high suspicion scores to confirm or rule them out
+    * These are YOUR private beliefs - other players cannot see them
 
     ## Communication
     * Keep messages focused: one claim or question per message
@@ -375,12 +396,19 @@ prompts:
     - action.updated_suspicion = map of player_id to suspicion score (0.0-1.0)
     - action.vote_intention = player ID you plan to vote for (optional)
 
+    **Suspicion Score Scale:**
+    * 0.0-0.2: Trusted/innocent - likely town
+    * 0.3-0.5: Neutral - no strong read
+    * 0.6-0.8: Suspicious - potential murderer
+    * 0.9-1.0: Highly suspicious - strong murderer candidate
+    * **Higher numbers = MORE suspicious = MORE likely to be the murderer**
+
     **Guidelines:**
     * Review the transcript carefully - look for contradictions
     * Consider who has been evasive or overly aggressive
     * Look at voting patterns from previous rounds
     * Update suspicion scores based on evidence, not hunches
-    * Your vote_intention should match your highest suspicion
+    * Your vote_intention should target the player with your highest suspicion score
 
   action_pass: |
     You are taking a **pass** action (cost: 0 AP).

@@ -53,7 +53,7 @@ def _create_game_event(
         round_num=runtime.public_state.round_num,
         phase=runtime.public_state.phase,
         actor_id=actor_id,
-        visibility=visibility,
+        visibility=visibility or Visibility(),
         payload=payload or {},
     )
 

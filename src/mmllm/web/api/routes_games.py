@@ -33,6 +33,7 @@ from mmllm.game.engine import GameEngine
 from mmllm.game.loop import GameLoop
 from mmllm.game.rules import legal_actions
 from mmllm.llm.local_client import LocalClient
+from mmllm.llm.openai_client import OpenAIClient
 from mmllm.llm.prompt_builder import load_game_config, load_prompt_templates
 
 router = APIRouter()
@@ -56,9 +57,12 @@ class CreateGameRequest(BaseModel):
     game_id: Optional[str] = None
     player_ids: Optional[List[str]] = None
     murderer_id: Optional[str] = None
-    agent_type: str = Field("scripted", description="scripted or ollama")
+    agent_type: str = Field("scripted", description="scripted, ollama, or openai")
     ollama_base_url: str = "http://127.0.0.1:11434"
     ollama_model: str = "llama3.1:8b"
+    openai_model: str = "gpt-3.5-turbo"
+    openai_api_key: Optional[str] = None  # If not provided, will use OPENAI_API_KEY from env
+    openai_base_url: Optional[str] = None  # If not provided, will use OPENAI_BASE_URL from env
 
 
 class RunGameRequest(BaseModel):
@@ -185,6 +189,30 @@ def create_game(
             summary_client = LocalClient(
                 data.ollama_base_url,
                 data.ollama_model,
+                prompt_callback=_store_prompt,
+            )
+            _SUMMARY_AGENTS[engine.runtime.public_state.game_id] = SummaryAgent(
+                summary_client,
+                templates.summary_system,
+                templates.summary_user,
+            )
+        elif data.agent_type == "openai":
+            templates = load_prompt_templates()
+            client = OpenAIClient(
+                model=data.openai_model,
+                api_key=data.openai_api_key,
+                base_url=data.openai_base_url,
+                system_prompt=templates.system_town,
+                user_prompt=templates.user,
+                prompt_callback=_store_prompt,
+            )
+            agents: Dict[str, Agent] = {
+                pid: LLMAgent(client, system_prompt="") for pid in player_ids
+            }
+            summary_client = OpenAIClient(
+                model=data.openai_model,
+                api_key=data.openai_api_key,
+                base_url=data.openai_base_url,
                 prompt_callback=_store_prompt,
             )
             _SUMMARY_AGENTS[engine.runtime.public_state.game_id] = SummaryAgent(
