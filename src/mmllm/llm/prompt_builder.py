@@ -10,7 +10,7 @@ from typing import Dict, List
 import yaml
 
 from mmllm.core.types import ActionRequest, AgentObservation
-from mmllm.llm.personality import get_personality_descriptors
+from mmllm.agents.personality_agent import PersonalityAgent
 
 
 @dataclass(frozen=True)
@@ -32,6 +32,7 @@ class PromptTemplates:
     action_poll: str
     action_whisper_send: str
     action_whisper_reply: str
+    action_analyze: str
     action_pass: str
     user: str
     summary_system: str
@@ -76,6 +77,7 @@ def load_prompt_templates(config_path: Path | None = None) -> PromptTemplates:
             action_poll="",
             action_whisper_send="",
             action_whisper_reply="",
+            action_analyze="",
             action_pass="",
             user="Phase: {phase}, Round: {round_num}.",
             summary_system="You are the public narrator for a Mafia-style deduction game.",
@@ -98,6 +100,7 @@ def load_prompt_templates(config_path: Path | None = None) -> PromptTemplates:
         action_poll=str(prompts.get("action_poll", "")),
         action_whisper_send=str(prompts.get("action_whisper_send", "")),
         action_whisper_reply=str(prompts.get("action_whisper_reply", "")),
+        action_analyze=str(prompts.get("action_analyze", "")),
         action_pass=str(prompts.get("action_pass", "")),
         user=str(prompts.get("user", "")),
         summary_system=str(prompts.get("summary_system", "")),
@@ -125,11 +128,18 @@ def build_messages(
 ) -> List[Dict[str, str]]:
     allowed_actions = [action.value for action in request.allowed_actions]
     action_request_json = json.dumps(request.model_dump(), ensure_ascii=False, indent=2)
-    observation_json = json.dumps(observation.model_dump(), ensure_ascii=False, indent=2)
-    constraints_json = json.dumps(request.constraints.model_dump(), ensure_ascii=False, indent=2)
+    observation_json = json.dumps(
+        observation.model_dump(), ensure_ascii=False, indent=2
+    )
+    constraints_json = json.dumps(
+        request.constraints.model_dump(), ensure_ascii=False, indent=2
+    )
 
-    # Get personality descriptors from controls
-    personality_descriptors = get_personality_descriptors(observation.controls)
+    # Generate personality description using PersonalityAgent
+    personality_agent = PersonalityAgent()
+    personality_description = personality_agent.describe(
+        observation.controls, observation.role
+    )
 
     format_args = {
         "request_id": request.request_id,
@@ -143,15 +153,8 @@ def build_messages(
         "action_request": action_request_json,
         "observation": observation_json,
         "constraints": constraints_json,
-        # Add personality values
-        "assertiveness": f"{observation.controls.assertiveness:.2f}",
-        "skepticism": f"{observation.controls.skepticism:.2f}",
-        "query_rate": f"{observation.controls.query_rate:.2f}",
-        "risk": f"{observation.controls.risk:.2f}",
-        "deception": f"{observation.controls.deception:.2f}",
-        "verbosity": f"{observation.controls.verbosity:.2f}",
-        # Add personality descriptions
-        **personality_descriptors,
+        # Inject personality description (replaces numeric scores)
+        "personality_description": personality_description,
     }
 
     system_content = _safe_format(system_prompt, format_args)

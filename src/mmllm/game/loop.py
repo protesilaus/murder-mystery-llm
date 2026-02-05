@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
+import json
+import logging
 from datetime import datetime, timezone
 from typing import Dict, List
 from uuid import uuid4
 
+logger = logging.getLogger(__name__)
+
 from mmllm.agents.base import Agent
+from mmllm.agents.llm_agent import LLMAgent
 from mmllm.agents.summary_agent import SummaryAgent
 from mmllm.core.game_config import GameTypeConfig, TurnOrder
 from mmllm.core.rng import RNG
@@ -54,12 +59,16 @@ class GameLoop:
         )
 
     def _turn_order(self) -> List[str]:
-        alive = [p.player_id for p in self.engine.runtime.public_state.players if p.alive]
+        alive = [
+            p.player_id for p in self.engine.runtime.public_state.players if p.alive
+        ]
         self.rng.shuffle(alive)
         return alive
 
     def _step_order(self) -> List[str]:
-        alive = [p.player_id for p in self.engine.runtime.public_state.players if p.alive]
+        alive = [
+            p.player_id for p in self.engine.runtime.public_state.players if p.alive
+        ]
         return sorted(alive)
 
     def _ensure_step_order(self) -> None:
@@ -116,7 +125,9 @@ class GameLoop:
 
         # Update: Waiting for LLM response
         runtime.execution_status.status = ExecutionStatus.waiting_response
-        runtime.execution_status.action_description = f"Waiting for {player_id} response"
+        runtime.execution_status.action_description = (
+            f"Waiting for {player_id} response"
+        )
 
         observation = self.engine.observation_for(player_id)
         agent.observe(observation)
@@ -126,16 +137,44 @@ class GameLoop:
         runtime.execution_status.status = ExecutionStatus.applying_action
         runtime.execution_status.action_description = f"Applying {player_id}'s action"
 
+        # DEBUG: Log the action being attempted
+        logger.info(
+            "Applying action: player=%s action_type=%s",
+            player_id,
+            response.action.type.value,
+        )
+
         try:
-            self.engine.apply_action(response)
+            events = self.engine.apply_action(response)
+            logger.info(
+                "Action applied successfully: player=%s action_type=%s events_created=%d",
+                player_id,
+                response.action.type.value,
+                len(events),
+            )
             return response
-        except ValueError:
+        except ValueError as exc:
+            logger.warning(
+                "Action failed with ValueError: player=%s action_type=%s error=%s",
+                player_id,
+                response.action.type.value,
+                str(exc),
+            )
+            return None
+        except Exception as exc:
+            logger.exception(
+                "Action failed with unexpected exception: player=%s action_type=%s",
+                player_id,
+                response.action.type.value,
+            )
             return None
         finally:
             # Reset to idle
             runtime.execution_status = GameStatus(status=ExecutionStatus.idle)
 
-    def _emit_public_message(self, body: str, *, actor_id: str = "narrator") -> GameEvent:
+    def _emit_public_message(
+        self, body: str, *, actor_id: str = "narrator"
+    ) -> GameEvent:
         event = GameEvent(
             event_id=f"evt_{uuid4().hex[:8]}",
             game_id=self.engine.runtime.public_state.game_id,
@@ -162,18 +201,16 @@ class GameLoop:
         runtime = self.engine.runtime
         start_idx = runtime.last_summary_index
         events = runtime.event_history[start_idx:]
-        
+
         # Filter to only public events - don't leak private messages to the summary
         public_events = [evt for evt in events if evt.visibility.mode == "public"]
-        
+
         public_state_json = runtime.public_state.model_dump_json(indent=2)
         transcript_json = runtime.public_memory.model_dump_json(indent=2)
-        events_json = (
-            "[" + ", ".join(evt.model_dump_json() for evt in public_events) + "]"
-            if public_events
-            else "[]"
-        )
-        summary = self.summary_agent.summarize(public_state_json, transcript_json, events_json).strip()
+        events_json = json.dumps([evt.model_dump() for evt in public_events], indent=2)
+        summary = self.summary_agent.summarize(
+            public_state_json, transcript_json, events_json
+        ).strip()
         if summary:
             self._emit_public_message(summary, actor_id="narrator")
             runtime.last_summary_index = len(runtime.event_history)
@@ -182,7 +219,11 @@ class GameLoop:
         runtime = self.engine.runtime
         if not runtime.pending_reveals:
             return
-        due = [item for item in runtime.pending_reveals if item.get("round_due") == runtime.public_state.round_num]
+        due = [
+            item
+            for item in runtime.pending_reveals
+            if item.get("round_due") == runtime.public_state.round_num
+        ]
         if not due:
             return
         for item in due:
@@ -192,17 +233,20 @@ class GameLoop:
                 f"Investigation result (from two days ago): {target_id} is {role}.",
                 actor_id="narrator",
             )
-        runtime.pending_reveals = [item for item in runtime.pending_reveals if item.get("round_due") != runtime.public_state.round_num]
+        runtime.pending_reveals = [
+            item
+            for item in runtime.pending_reveals
+            if item.get("round_due") != runtime.public_state.round_num
+        ]
 
     def _update_memories(self) -> None:
         runtime = self.engine.runtime
         transcript_json = runtime.public_memory.model_dump_json(indent=2)
         for player_id, agent in self.agents.items():
-            if not hasattr(agent, "client"):
+            # Only LLMAgents support memory updates
+            if not isinstance(agent, LLMAgent):
                 continue
-            client = getattr(agent, "client", None)
-            if client is None or not hasattr(client, "generate_memory_update"):
-                continue
+            client = agent.client
             player = runtime.get_player(player_id)
             if player is None or not player.alive:
                 continue
@@ -224,7 +268,9 @@ class GameLoop:
                         continue
                 memory.beliefs.suspicion = cleaned
             if isinstance(update.get("top_suspects"), list):
-                memory.beliefs.top_suspects = [str(x) for x in update.get("top_suspects", [])]
+                memory.beliefs.top_suspects = [
+                    str(x) for x in update.get("top_suspects", [])
+                ]
             if isinstance(update.get("trusted"), list):
                 memory.beliefs.trusted = [str(x) for x in update.get("trusted", [])]
             if isinstance(update.get("plan_next"), str):
@@ -275,6 +321,16 @@ class GameLoop:
                 safety += 1
                 if safety > 200:
                     break
+            return
+
+        if phase == Phase.analysis:
+            # Analysis phase: players review others and update suspicion
+            self._ensure_step_order()
+            for player_id in self.engine.runtime.turn_order:
+                if player_id in self.agents:
+                    self._apply_agent_action(player_id)
+            self._update_memories()
+            self.engine.advance_phase()
             return
 
         if phase == Phase.vote:
@@ -329,7 +385,11 @@ class GameLoop:
         if phase == Phase.night and is_round_1 and skip_kill_round_1:
             runtime = self.engine.runtime
             detective_id = runtime.detective_id
-            if detective_id and not runtime.night1_investigation_done and detective_id in self.agents:
+            if (
+                detective_id
+                and not runtime.night1_investigation_done
+                and detective_id in self.agents
+            ):
                 self._apply_agent_action(detective_id)
                 runtime.night1_investigation_done = True
                 return self.engine.runtime.event_history[before:]
@@ -356,7 +416,9 @@ class GameLoop:
             runtime.pending_question_from = None
             runtime.pending_question_to = None
             runtime.pending_question_body = None
-            all_out = all(p.social_ap <= 0 for p in runtime.public_state.players if p.alive)
+            all_out = all(
+                p.social_ap <= 0 for p in runtime.public_state.players if p.alive
+            )
             all_passed = False
             if all_out or all_passed:
                 runtime.cycle_passes.clear()
@@ -366,7 +428,10 @@ class GameLoop:
             return self.engine.runtime.event_history[before:]
 
         self._ensure_step_order()
-        if runtime.turn_index >= len(runtime.turn_order) and runtime.public_state.phase != Phase.ended:
+        if (
+            runtime.turn_index >= len(runtime.turn_order)
+            and runtime.public_state.phase != Phase.ended
+        ):
             if phase == Phase.vote:
                 self.engine.resolve_votes()
                 self._update_memories()
@@ -387,7 +452,9 @@ class GameLoop:
                 runtime.cycle_passes.clear()
 
             alive_ids = [p.player_id for p in runtime.public_state.players if p.alive]
-            all_out = all(p.social_ap <= 0 for p in runtime.public_state.players if p.alive)
+            all_out = all(
+                p.social_ap <= 0 for p in runtime.public_state.players if p.alive
+            )
             all_passed = set(alive_ids).issubset(runtime.cycle_passes)
             if runtime.pending_question_to:
                 return self.engine.runtime.event_history[before:]
@@ -441,7 +508,10 @@ class GameLoop:
                     "actor_type": "player",
                     "reason": "night1_investigation",
                 }
-            if not runtime.night1_body_emitted and config.special_rules.opening_body_event:
+            if (
+                not runtime.night1_body_emitted
+                and config.special_rules.opening_body_event
+            ):
                 return {
                     "actor_id": "narrator",
                     "actor_type": "narrator",

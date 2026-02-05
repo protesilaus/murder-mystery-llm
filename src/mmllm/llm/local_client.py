@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 import json
-import re
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict
-from urllib.error import URLError
-from urllib.request import Request, urlopen
+from typing import Callable
 
+from mmllm.core.http import post_json
+from mmllm.core.utils import CODE_FENCE_RE
 from mmllm.core.types import (
     ActionRequest,
     ActionResponse,
@@ -31,8 +30,6 @@ from mmllm.llm.prompt_builder import (
     build_summary_messages,
     load_prompt_templates,
 )
-
-_CODE_FENCE_RE = re.compile(r"```(?:json)?\s*(.*?)```", re.DOTALL)
 
 
 class LocalClient(LLMClient):
@@ -92,13 +89,18 @@ class LocalClient(LLMClient):
             }
             self.prompt_callback(request.game_id, request.request_id, prompt_data)
 
+        # Use player-specific temperature and top_p for conversation diversity
         payload = {
             "model": self.model,
             "stream": False,
             "messages": messages,
+            "options": {
+                "temperature": observation.controls.temperature,
+                "top_p": observation.controls.top_p,
+            },
         }
 
-        response = _post_json(f"{self.base_url}/api/chat", payload)
+        response = post_json(f"{self.base_url}/api/chat", payload)
         content = response.get("message", {}).get("content", "")
 
         # Store response in prompt data (if callback provided)
@@ -107,13 +109,15 @@ class LocalClient(LLMClient):
             prompt_data["response"] = {"content": content, "raw_response": response}
             self.prompt_callback(request.game_id, request.request_id, prompt_data)
         action, error, detected_type = _parse_action(content)
-        
+
         # If parsing failed but we detected an action type, try a retry with corrective prompt
         if action is None and detected_type:
             retry_prompt = _build_retry_prompt(detected_type, request)
             messages.append({"role": "assistant", "content": content})
             messages.append({"role": "user", "content": retry_prompt})
-            retry_response = _post_json(f"{self.base_url}/api/chat", payload | {"messages": messages})
+            retry_response = post_json(
+                f"{self.base_url}/api/chat", payload | {"messages": messages}
+            )
             retry_content = retry_response.get("message", {}).get("content", "")
             retry_action, retry_error, _ = _parse_action(retry_content)
             if retry_action is not None:
@@ -125,7 +129,7 @@ class LocalClient(LLMClient):
                     phase=request.phase,
                     action=retry_action,
                 )
-        
+
         if action is None:
             reason = error or "unknown_error"
             action = PassAction(
@@ -160,7 +164,7 @@ class LocalClient(LLMClient):
             "stream": False,
             "messages": messages,
         }
-        response = _post_json(f"{self.base_url}/api/chat", payload)
+        response = post_json(f"{self.base_url}/api/chat", payload)
         return response.get("message", {}).get("content", "")
 
     def generate_memory_update(
@@ -181,7 +185,7 @@ class LocalClient(LLMClient):
             "stream": False,
             "messages": messages,
         }
-        response = _post_json(f"{self.base_url}/api/chat", payload)
+        response = post_json(f"{self.base_url}/api/chat", payload)
         content = response.get("message", {}).get("content", "")
         return _parse_memory_update(content)
 
@@ -203,11 +207,13 @@ class LocalClient(LLMClient):
             role_system_prompt = self.templates.system_town
 
         # Build messages with game context
-        context_prompt = f"Current game context:\n{observation.model_dump_json(indent=2)}"
+        context_prompt = (
+            f"Current game context:\n{observation.model_dump_json(indent=2)}"
+        )
         messages = [
             {"role": "system", "content": role_system_prompt},
             {"role": "system", "content": context_prompt},
-            {"role": "user", "content": user_message}
+            {"role": "user", "content": user_message},
         ]
 
         payload = {
@@ -216,7 +222,7 @@ class LocalClient(LLMClient):
             "messages": messages,
         }
 
-        response = _post_json(f"{self.base_url}/api/chat", payload)
+        response = post_json(f"{self.base_url}/api/chat", payload)
         return response.get("message", {}).get("content", "")
 
 
@@ -242,19 +248,9 @@ def _select_action_prompt(request: ActionRequest, templates) -> str | None:
     return None
 
 
-def _post_json(url: str, payload: Dict[str, Any]) -> Dict[str, Any]:
-    body = json.dumps(payload).encode("utf-8")
-    req = Request(url, data=body, headers={"Content-Type": "application/json"})
-    try:
-        with urlopen(req, timeout=30) as resp:
-            return json.loads(resp.read().decode("utf-8"))
-    except URLError as exc:
-        raise RuntimeError(f"Ollama request failed: {exc}") from exc
-
-
 def _parse_action(content: str):
     text = content.strip()
-    match = _CODE_FENCE_RE.search(text)
+    match = CODE_FENCE_RE.search(text)
     if match:
         text = match.group(1).strip()
 
@@ -271,7 +267,7 @@ def _parse_action(content: str):
 
     # Try to extract the action block - support multiple formats
     action_block = None
-    
+
     # Format 1: {"action": {"type": "...", ...}, ...}  (PREFERRED)
     if isinstance(data.get("action"), dict):
         action_block = data["action"]
@@ -283,21 +279,31 @@ def _parse_action(content: str):
         # Try to reconstruct - assume the type is the action value
         action_block = {"type": data["action"]}
         # Copy over other fields that might be relevant
-        for key in ["body", "target_player_id", "to_player_id", "note", "reasoning_private"]:
+        for key in [
+            "body",
+            "target_player_id",
+            "to_player_id",
+            "note",
+            "reasoning_private",
+        ]:
             if key in data:
                 action_block[key] = data[key]
-    
+
     if not isinstance(action_block, dict):
         keys = ", ".join(sorted(data.keys()))
         return None, f"missing action object (top-level keys: {keys})", None
 
     # Get action type - handle common variations
-    action_type = action_block.get("type") or action_block.get("action_type") or action_block.get("action")
-    
+    action_type = (
+        action_block.get("type")
+        or action_block.get("action_type")
+        or action_block.get("action")
+    )
+
     if not action_type:
         keys = ", ".join(sorted(action_block.keys()))
         return None, f"missing type (keys: {keys}); raw={json.dumps(data)[:200]}", None
-    
+
     # If action_type is a string, use it directly
     if not isinstance(action_type, str):
         return None, f"type must be string, got {type(action_type).__name__}", None
@@ -310,7 +316,7 @@ def _parse_action(content: str):
 
     # Now we know the action type - use it for retries if needed
     detected_type = action_enum
-    
+
     if action_enum == ActionType.speak:
         body = action_block.get("body")
         if body is None:
@@ -380,7 +386,7 @@ def _parse_action(content: str):
 
 def _parse_memory_update(content: str) -> dict | None:
     text = content.strip()
-    match = _CODE_FENCE_RE.search(text)
+    match = CODE_FENCE_RE.search(text)
     if match:
         text = match.group(1).strip()
     if not text:
@@ -404,7 +410,7 @@ def _truncate(text: str, limit: int = 300) -> str:
 
 def _build_retry_prompt(action_type: ActionType, request: ActionRequest) -> str:
     """Build a retry prompt when the first attempt had the right action type but was malformed."""
-    
+
     templates = {
         ActionType.speak: {
             "template": '"request_id": REQID, "game_id": GAMEID, "player_id": PLAYERID, "round_num": ROUND, "phase": PHASE, "action": {"type": "speak", "body": "your message"}',
@@ -447,14 +453,16 @@ def _build_retry_prompt(action_type: ActionType, request: ActionRequest) -> str:
             "missing": '"to_player_id" or "body" field',
         },
     }
-    
+
     template = templates.get(action_type)
     if not template:
         return "Your last response had an invalid action type. Please try again with the correct structure."
-    
+
     # Get phase string value
-    phase_str = request.phase.value if hasattr(request.phase, 'value') else str(request.phase)
-    
+    phase_str = (
+        request.phase.value if hasattr(request.phase, "value") else str(request.phase)
+    )
+
     example = (
         template["template"]
         .replace("REQID", f'"{request.request_id}"')
@@ -463,7 +471,7 @@ def _build_retry_prompt(action_type: ActionType, request: ActionRequest) -> str:
         .replace("ROUND", str(request.round_num))
         .replace("PHASE", f'"{phase_str}"')
     )
-    
+
     return (
         f"**RETRY**: Your last response detected a '{action_type.value}' action, but it was incomplete or malformed. "
         f"You are missing the {template['missing']}.\n\n"

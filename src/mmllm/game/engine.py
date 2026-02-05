@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from datetime import datetime, timezone
 from typing import Iterable, List
-from uuid import uuid4
 
 from mmllm.core.clock import PhaseClock
 from mmllm.core.game_config import GameTypeConfig
+from mmllm.core.rng import RNG
+from mmllm.core.utils import event_id, normalize_player_id, ts_utc
 from mmllm.core.types import (
     ActionResponse,
     AgentObservation,
@@ -28,13 +28,61 @@ from mmllm.game.adjudicator import apply_action
 from mmllm.game.rules import is_game_over, winner
 from mmllm.game.state import GameRuntime
 
+# Constants for prompt optimization
+TRANSCRIPT_WINDOW_SIZE = 8  # Number of recent messages to include in prompts
 
-def _ts_utc() -> str:
-    return datetime.now(timezone.utc).isoformat()
+
+def _sanitize_public_state_for_player(
+    public_state: PublicState, player_id: str
+) -> PublicState:
+    """Create a sanitized copy of public_state for a specific player.
+
+    Removes information that should be private:
+    - Other players' personality controls (deception, risk, etc.)
+    - Other players' social_ap (only show their own)
+    """
+    sanitized_players = []
+    for player in public_state.players:
+        if player.player_id == player_id:
+            # Keep full info for the requesting player
+            sanitized_players.append(player)
+        else:
+            # Sanitize other players - remove controls and AP info
+            sanitized_players.append(
+                PlayerState(
+                    player_id=player.player_id,
+                    alive=player.alive,
+                    social_ap_max=0,  # Hidden from other players
+                    social_ap=0,  # Hidden from other players
+                    controls=Controls(),  # Default/neutral controls (hides personality)
+                )
+            )
+
+    return PublicState(
+        game_id=public_state.game_id,
+        round_num=public_state.round_num,
+        phase=public_state.phase,
+        players=sanitized_players,
+        last_night_kill=public_state.last_night_kill,
+        last_day_eliminated=public_state.last_day_eliminated,
+        current_votes=public_state.current_votes,
+    )
 
 
-def _event_id(prefix: str) -> str:
-    return f"{prefix}_{uuid4().hex[:8]}"
+def _window_transcript(
+    public_memory: PublicMemory, window_size: int = TRANSCRIPT_WINDOW_SIZE
+) -> PublicMemory:
+    """Create a copy of public_memory with only the last N transcript entries.
+
+    This reduces token usage in prompts while keeping recent context.
+    """
+    windowed_transcript = public_memory.transcript[-window_size:]
+
+    return PublicMemory(
+        transcript=windowed_transcript,
+        event_digests=public_memory.event_digests,
+        round_summaries=public_memory.round_summaries,
+    )
 
 
 class GameEngine:
@@ -58,27 +106,30 @@ class GameEngine:
             else self.game_config.player_settings.actions_per_player
         )
 
-        ids = [pid.strip().lower() for pid in player_ids]
+        ids = [normalize_player_id(pid) for pid in player_ids]
         if not ids:
             raise ValueError("player_ids must be non-empty")
 
-        murderer = murderer_id.strip().lower() if murderer_id else ids[0]
+        murderer = normalize_player_id(murderer_id) if murderer_id else ids[0]
         if murderer not in ids:
             raise ValueError("murderer_id must be one of the player_ids")
 
         detective = next((pid for pid in ids if pid != murderer), None)
 
         # Generate random personality for each player
-        import random
+        rng = RNG()
         players = []
         for pid in ids:
             controls = Controls(
-                assertiveness=random.uniform(0.3, 0.9),
-                skepticism=random.uniform(0.3, 0.9),
-                query_rate=random.uniform(0.2, 0.8),
-                risk=random.uniform(0.2, 0.9),
-                deception=random.uniform(0.1, 0.8),
-                verbosity=random.uniform(0.3, 0.8),
+                assertiveness=rng._random.uniform(0.3, 0.9),
+                skepticism=rng._random.uniform(0.3, 0.9),
+                query_rate=rng._random.uniform(0.2, 0.8),
+                risk=rng._random.uniform(0.2, 0.9),
+                deception=rng._random.uniform(0.1, 0.8),
+                verbosity=rng._random.uniform(0.3, 0.8),
+                # LLM generation params for conversation diversity
+                temperature=rng._random.uniform(0.5, 1.0),
+                top_p=rng._random.uniform(0.8, 0.95),
             )
             players.append(
                 PlayerState(
@@ -91,7 +142,8 @@ class GameEngine:
         public_state = PublicState(game_id=game_id.strip().lower(), players=players)
         public_memory = PublicMemory()
         private_memories = {
-            pid: PrivateMemory(player_id=pid, round_num=public_state.round_num) for pid in ids
+            pid: PrivateMemory(player_id=pid, round_num=public_state.round_num)
+            for pid in ids
         }
         roles = {}
         for pid in ids:
@@ -106,7 +158,15 @@ class GameEngine:
         if phases is not None:
             phase_list = list(phases)
         else:
-            phase_list = [Phase(p.name) for p in self.game_config.phases]
+            phase_list = []
+            for p in self.game_config.phases:
+                # Skip analysis phase if not enabled in special rules
+                if (
+                    p.name == "analysis"
+                    and not self.game_config.special_rules.enable_analysis_phase
+                ):
+                    continue
+                phase_list.append(Phase(p.name))
         clock = PhaseClock(phase_list)
 
         self.runtime = GameRuntime(
@@ -170,7 +230,8 @@ class GameEngine:
                 phase=event.phase,
                 speaker_id=speaker_id,
                 body=str(event.payload.get("body", "")),
-                visibility=event.visibility or Visibility(mode="direct", to=[speaker_id, to_player]),
+                visibility=event.visibility
+                or Visibility(mode="direct", to=[speaker_id, to_player]),
             )
             sender_mem = self.runtime.private_memories.get(speaker_id)
             receiver_mem = self.runtime.private_memories.get(to_player)
@@ -226,9 +287,9 @@ class GameEngine:
     def start(self) -> List[GameEvent]:
         events: List[GameEvent] = [
             GameEvent(
-                event_id=_event_id("evt"),
+                event_id=event_id("evt"),
                 game_id=self.runtime.public_state.game_id,
-                ts_utc=_ts_utc(),
+                ts_utc=ts_utc(),
                 event_type=EventType.game_created,
                 round_num=self.runtime.public_state.round_num,
                 phase=self.runtime.public_state.phase,
@@ -237,9 +298,9 @@ class GameEngine:
         self.runtime.public_state.phase = self.runtime.clock.current()
         events.append(
             GameEvent(
-                event_id=_event_id("evt"),
+                event_id=event_id("evt"),
                 game_id=self.runtime.public_state.game_id,
-                ts_utc=_ts_utc(),
+                ts_utc=ts_utc(),
                 event_type=EventType.phase_started,
                 round_num=self.runtime.public_state.round_num,
                 phase=self.runtime.public_state.phase,
@@ -257,13 +318,21 @@ class GameEngine:
         if role is None or memory is None or player is None:
             raise ValueError("unknown player_id")
 
+        # Sanitize public state to remove other players' private info
+        sanitized_public_state = _sanitize_public_state_for_player(
+            self.runtime.public_state, player_id
+        )
+
+        # Window the transcript to reduce token usage
+        windowed_memory = _window_transcript(self.runtime.public_memory)
+
         return AgentObservation(
             game_id=self.runtime.public_state.game_id,
             player_id=player_id,
             round_num=self.runtime.public_state.round_num,
             phase=self.runtime.public_state.phase,
-            public_state=self.runtime.public_state,
-            public_memory=self.runtime.public_memory,
+            public_state=sanitized_public_state,
+            public_memory=windowed_memory,
             role=role,
             private_memory=memory,
             controls=player.controls,
@@ -278,9 +347,8 @@ class GameEngine:
         # Check if current phase should reset AP (from config or default day phase behavior)
         phase_name = self.runtime.public_state.phase.value
         phase_config = self.game_config.get_phase_config(phase_name)
-        should_reset_ap = (
-            (phase_config and phase_config.ap_reset)
-            or (phase_config is None and self.runtime.public_state.phase == Phase.day)
+        should_reset_ap = (phase_config and phase_config.ap_reset) or (
+            phase_config is None and self.runtime.public_state.phase == Phase.day
         )
         if should_reset_ap:
             for player in self.runtime.public_state.players:
@@ -289,9 +357,9 @@ class GameEngine:
 
         events = [
             GameEvent(
-                event_id=_event_id("evt"),
+                event_id=event_id("evt"),
                 game_id=self.runtime.public_state.game_id,
-                ts_utc=_ts_utc(),
+                ts_utc=ts_utc(),
                 event_type=EventType.phase_started,
                 round_num=self.runtime.public_state.round_num,
                 phase=self.runtime.public_state.phase,
@@ -307,9 +375,9 @@ class GameEngine:
             self.runtime.public_state.phase = Phase.ended
             events.append(
                 GameEvent(
-                    event_id=_event_id("evt"),
+                    event_id=event_id("evt"),
                     game_id=self.runtime.public_state.game_id,
-                    ts_utc=_ts_utc(),
+                    ts_utc=ts_utc(),
                     event_type=EventType.game_ended,
                     round_num=self.runtime.public_state.round_num,
                     phase=self.runtime.public_state.phase,
@@ -341,9 +409,9 @@ class GameEngine:
         self.runtime.public_state.current_votes.clear()
         events = [
             GameEvent(
-                event_id=_event_id("evt"),
+                event_id=event_id("evt"),
                 game_id=self.runtime.public_state.game_id,
-                ts_utc=_ts_utc(),
+                ts_utc=ts_utc(),
                 event_type=EventType.vote_resolved,
                 round_num=self.runtime.public_state.round_num,
                 phase=self.runtime.public_state.phase,
@@ -353,14 +421,30 @@ class GameEngine:
         if target and target.alive is False:
             events.append(
                 GameEvent(
-                    event_id=_event_id("evt"),
+                    event_id=event_id("evt"),
                     game_id=self.runtime.public_state.game_id,
-                    ts_utc=_ts_utc(),
+                    ts_utc=ts_utc(),
                     event_type=EventType.player_eliminated,
                     round_num=self.runtime.public_state.round_num,
                     phase=self.runtime.public_state.phase,
                     payload={"player_id": target_id},
                 )
             )
+
+        # Check for win conditions after elimination
+        if is_game_over(self.runtime):
+            self.runtime.public_state.phase = Phase.ended
+            events.append(
+                GameEvent(
+                    event_id=event_id("evt"),
+                    game_id=self.runtime.public_state.game_id,
+                    ts_utc=ts_utc(),
+                    event_type=EventType.game_ended,
+                    round_num=self.runtime.public_state.round_num,
+                    phase=self.runtime.public_state.phase,
+                    payload={"winner": winner(self.runtime)},
+                )
+            )
+
         self.runtime.event_history.extend(events)
         return events

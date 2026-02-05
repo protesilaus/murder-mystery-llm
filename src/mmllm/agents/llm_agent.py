@@ -13,5 +13,7 @@ class LLMAgent(Agent):
     def observe(self, observation: AgentObservation) -> None:
         self._last_observation = observation
 
-    def act(self, request: ActionRequest, observation: AgentObservation) -> ActionResponse:
+    def act(
+        self, request: ActionRequest, observation: AgentObservation
+    ) -> ActionResponse:
         return self.client.generate_action(request, observation, self.system_prompt)

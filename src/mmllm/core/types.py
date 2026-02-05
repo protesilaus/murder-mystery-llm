@@ -24,6 +24,7 @@ class Phase(str, Enum):
     setup = "setup"
     night = "night"
     day = "day"
+    analysis = "analysis"  # Optional pre-vote phase for player analysis
     vote = "vote"
     ended = "ended"
 
@@ -35,6 +36,7 @@ class ActionType(str, Enum):
     investigate = "investigate"
     whisper_send = "whisper_send"
     whisper_reply = "whisper_reply"
+    analyze = "analyze"  # Update suspicion based on reviewing other players
     vote = "vote"
     kill = "kill"
     pass_turn = "pass"
@@ -56,6 +58,7 @@ class EventType(str, Enum):
 
 class ExecutionStatus(str, Enum):
     """Current execution state of the game loop."""
+
     idle = "idle"
     querying_llm = "querying_llm"
     waiting_response = "waiting_response"
@@ -101,6 +104,11 @@ class Controls(IdModel):
     risk: float = Field(0.5, ge=0.0, le=1.0)
     deception: float = Field(0.0, ge=0.0, le=1.0)
     verbosity: float = Field(0.5, ge=0.0, le=1.0)
+
+    # LLM generation parameters for conversation diversity
+    # Each player gets unique values to make responses more varied
+    temperature: float = Field(0.7, ge=0.1, le=1.5)
+    top_p: float = Field(0.9, ge=0.1, le=1.0)
 
 
 class Constraints(IdModel):
@@ -170,11 +178,14 @@ class PublicState(IdModel):
 
 class GameStatus(IdModel):
     """Current execution status for real-time UI updates."""
+
     status: ExecutionStatus = ExecutionStatus.idle
     current_actor: Optional[str] = None
     action_description: Optional[str] = None  # Human-readable status message
     request_id: Optional[str] = None  # Link to stored LLM prompt
-    timestamp: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    timestamp: str = Field(
+        default_factory=lambda: datetime.now(timezone.utc).isoformat()
+    )
 
 
 class Visibility(IdModel):
@@ -213,10 +224,14 @@ class PublicMemory(IdModel):
     transcript: List[TranscriptEntry] = Field(default_factory=list)
 
     # Optional: short factual digest per round (engine-generated)
-    event_digests: Dict[int, List[str]] = Field(default_factory=dict)  # round -> bullet facts
+    event_digests: Dict[int, List[str]] = Field(
+        default_factory=dict
+    )  # round -> bullet facts
 
     # Optional: compressed summaries (LLM-generated, but treated as "notes", not facts)
-    round_summaries: Dict[int, List[str]] = Field(default_factory=dict)  # round -> bullets
+    round_summaries: Dict[int, List[str]] = Field(
+        default_factory=dict
+    )  # round -> bullets
 
 
 class PrivateBeliefs(IdModel):
@@ -371,6 +386,32 @@ class WhisperReplyAction(ActionBase):
         return cls._lower_id(v)
 
 
+class AnalyzeAction(ActionBase):
+    """Action for the analysis phase - update suspicion and prepare for vote."""
+
+    type: Literal[ActionType.analyze] = ActionType.analyze
+    updated_suspicion: Dict[str, float] = Field(default_factory=dict)
+    vote_intention: Optional[str] = None  # Who they plan to vote for
+
+    @field_validator("updated_suspicion")
+    @classmethod
+    def _v_suspicion(cls, v: Dict[str, float]) -> Dict[str, float]:
+        out: Dict[str, float] = {}
+        for k, val in v.items():
+            k2 = cls._lower_id(k)
+            if not (0.0 <= float(val) <= 1.0):
+                raise ValueError("suspicion values must be in [0,1]")
+            out[k2] = float(val)
+        return out
+
+    @field_validator("vote_intention")
+    @classmethod
+    def _v_vote(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
+        return cls._lower_id(v)
+
+
 class VoteAction(ActionBase):
     type: Literal[ActionType.vote] = ActionType.vote
     target_player_id: str
@@ -403,6 +444,7 @@ AgentAction = Union[
     InvestigateAction,
     WhisperSendAction,
     WhisperReplyAction,
+    AnalyzeAction,
     VoteAction,
     KillAction,
     PassAction,
@@ -428,7 +470,9 @@ class ActionResponse(IdModel):
 
     @field_validator("suspicion_scores")
     @classmethod
-    def _v_suspicion_scores(cls, v: Optional[Dict[str, float]]) -> Optional[Dict[str, float]]:
+    def _v_suspicion_scores(
+        cls, v: Optional[Dict[str, float]]
+    ) -> Optional[Dict[str, float]]:
         if v is None:
             return None
         out: Dict[str, float] = {}

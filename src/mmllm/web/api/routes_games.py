@@ -33,6 +33,7 @@ from mmllm.game.engine import GameEngine
 from mmllm.game.loop import GameLoop
 from mmllm.game.rules import legal_actions
 from mmllm.llm.local_client import LocalClient
+from mmllm.llm.openai_client import OpenAIClient
 from mmllm.llm.prompt_builder import load_game_config, load_prompt_templates
 
 router = APIRouter()
@@ -56,9 +57,12 @@ class CreateGameRequest(BaseModel):
     game_id: Optional[str] = None
     player_ids: Optional[List[str]] = None
     murderer_id: Optional[str] = None
-    agent_type: str = Field("scripted", description="scripted or ollama")
+    agent_type: str = Field("scripted", description="scripted, ollama, or openai")
     ollama_base_url: str = "http://127.0.0.1:11434"
     ollama_model: str = "llama3.1:8b"
+    openai_model: str = "gpt-3.5-turbo"
+    openai_api_key: Optional[str] = None  # If not provided, will use OPENAI_API_KEY from env
+    openai_base_url: Optional[str] = None  # If not provided, will use OPENAI_BASE_URL from env
 
 
 class RunGameRequest(BaseModel):
@@ -157,7 +161,7 @@ def create_game(
                 if str(p.get("player_id", "")).strip()
             ]
         if not player_ids:
-            player_ids = [f"p{i+1}" for i in range(config.player_count)]
+            player_ids = [f"p{i + 1}" for i in range(config.player_count)]
         game_id = data.game_id or f"game_{len(_GAMES) + 1:03d}"
         engine = GameEngine(
             game_id=game_id,
@@ -180,8 +184,7 @@ def create_game(
                 prompt_callback=_store_prompt,
             )
             agents: Dict[str, Agent] = {
-                pid: LLMAgent(client, system_prompt="")
-                for pid in player_ids
+                pid: LLMAgent(client, system_prompt="") for pid in player_ids
             }
             summary_client = LocalClient(
                 data.ollama_base_url,
@@ -193,8 +196,34 @@ def create_game(
                 templates.summary_system,
                 templates.summary_user,
             )
+        elif data.agent_type == "openai":
+            templates = load_prompt_templates()
+            client = OpenAIClient(
+                model=data.openai_model,
+                api_key=data.openai_api_key,
+                base_url=data.openai_base_url,
+                system_prompt=templates.system_town,
+                user_prompt=templates.user,
+                prompt_callback=_store_prompt,
+            )
+            agents: Dict[str, Agent] = {
+                pid: LLMAgent(client, system_prompt="") for pid in player_ids
+            }
+            summary_client = OpenAIClient(
+                model=data.openai_model,
+                api_key=data.openai_api_key,
+                base_url=data.openai_base_url,
+                prompt_callback=_store_prompt,
+            )
+            _SUMMARY_AGENTS[engine.runtime.public_state.game_id] = SummaryAgent(
+                summary_client,
+                templates.summary_system,
+                templates.summary_user,
+            )
         else:
-            agents = {pid: ScriptedAgent(seed=idx) for idx, pid in enumerate(player_ids)}
+            agents = {
+                pid: ScriptedAgent(seed=idx) for idx, pid in enumerate(player_ids)
+            }
             _SUMMARY_AGENTS[engine.runtime.public_state.game_id] = None
         _AGENTS[engine.runtime.public_state.game_id] = agents
         _append_game_events(request, engine.runtime.public_state.game_id, start_events)
@@ -249,7 +278,10 @@ def run_game(
         return {"error": "not_found"}
     agents = _AGENTS.get(game_id)
     if agents is None:
-        agents = {p.player_id: ScriptedAgent(seed=idx) for idx, p in enumerate(engine.runtime.public_state.players)}
+        agents = {
+            p.player_id: ScriptedAgent(seed=idx)
+            for idx, p in enumerate(engine.runtime.public_state.players)
+        }
         _AGENTS[game_id] = agents
     summary_agent = _SUMMARY_AGENTS.get(game_id)
 
@@ -277,7 +309,10 @@ def run_round(game_id: str, request: Request):
         return {"error": "not_found"}
     agents = _AGENTS.get(game_id)
     if agents is None:
-        agents = {p.player_id: ScriptedAgent(seed=idx) for idx, p in enumerate(engine.runtime.public_state.players)}
+        agents = {
+            p.player_id: ScriptedAgent(seed=idx)
+            for idx, p in enumerate(engine.runtime.public_state.players)
+        }
         _AGENTS[game_id] = agents
     summary_agent = _SUMMARY_AGENTS.get(game_id)
 
@@ -335,7 +370,10 @@ def run_action(game_id: str, request: Request):
         return {"error": "not_found"}
     agents = _AGENTS.get(game_id)
     if agents is None:
-        agents = {p.player_id: ScriptedAgent(seed=idx) for idx, p in enumerate(engine.runtime.public_state.players)}
+        agents = {
+            p.player_id: ScriptedAgent(seed=idx)
+            for idx, p in enumerate(engine.runtime.public_state.players)
+        }
         _AGENTS[game_id] = agents
     summary_agent = _SUMMARY_AGENTS.get(game_id)
 
@@ -399,11 +437,15 @@ def interject(game_id: str, request: Request, payload: InterjectRequest):
         event_id=f"evt_{uuid4().hex[:8]}",
         game_id=engine.runtime.public_state.game_id,
         ts_utc=datetime.now(timezone.utc).isoformat(),
-        event_type=EventType.message_public if visibility == "public" else EventType.message_private,
+        event_type=EventType.message_public
+        if visibility == "public"
+        else EventType.message_private,
         round_num=engine.runtime.public_state.round_num,
         phase=engine.runtime.public_state.phase,
         actor_id=speaker_id,
-        visibility=Visibility(mode="public" if visibility == "public" else "direct", to=[]),
+        visibility=Visibility(
+            mode="public" if visibility == "public" else "direct", to=[]
+        ),
         payload={"body": body},
     )
 
@@ -477,7 +519,9 @@ async def ai_chat(game_id: str, payload: AIChatRequest):
 
     agents = _AGENTS.get(game_id)
     if not agents:
-        raise HTTPException(status_code=400, detail="No agents configured for this game")
+        raise HTTPException(
+            status_code=400, detail="No agents configured for this game"
+        )
 
     # Get the first LLM agent to use for chat
     llm_agent = None
@@ -487,7 +531,10 @@ async def ai_chat(game_id: str, payload: AIChatRequest):
             break
 
     if llm_agent is None:
-        raise HTTPException(status_code=400, detail="No LLM agents available. Game must use 'ollama' agent type.")
+        raise HTTPException(
+            status_code=400,
+            detail="No LLM agents available. Game must use 'ollama' agent type.",
+        )
 
     try:
         # Build a context message about the current game state
@@ -496,7 +543,7 @@ async def ai_chat(game_id: str, payload: AIChatRequest):
         context = f"""Current game state:
 - Phase: {public_state.phase}
 - Round: {public_state.round_num}
-- Alive players: {', '.join(alive_players)}
+- Alive players: {", ".join(alive_players)}
 - Total events: {len(engine.runtime.event_history)}
 
 User question: {payload.message}
@@ -524,7 +571,9 @@ async def ai_generate_action(game_id: str, payload: AIGenerateActionRequest):
 
     agents = _AGENTS.get(game_id)
     if not agents:
-        raise HTTPException(status_code=400, detail="No agents configured for this game")
+        raise HTTPException(
+            status_code=400, detail="No agents configured for this game"
+        )
 
     # Get the first LLM agent
     llm_agent = None
@@ -534,7 +583,10 @@ async def ai_generate_action(game_id: str, payload: AIGenerateActionRequest):
             break
 
     if llm_agent is None:
-        raise HTTPException(status_code=400, detail="No LLM agents available. Game must use 'ollama' agent type.")
+        raise HTTPException(
+            status_code=400,
+            detail="No LLM agents available. Game must use 'ollama' agent type.",
+        )
 
     try:
         public_state = engine.runtime.public_state
@@ -555,7 +607,7 @@ async def ai_generate_action(game_id: str, payload: AIGenerateActionRequest):
             "question": '{"target": "player_id", "body": "Where were you last night?"}',
             "poll": '{"body": "Who do you think is suspicious?"}',
             "vote": '{"target": "player_id"}',
-            "pass": '{}',
+            "pass": "{}",
         }
 
         prompt = f"""Generate valid JSON for a {payload.action_type} action in this murder mystery game.
@@ -564,10 +616,10 @@ Current game state:
 - Phase: {public_state.phase}
 - Round: {public_state.round_num}
 - Current player: {current_player.player_id}
-- Alive players: {', '.join(alive_players)}
+- Alive players: {", ".join(alive_players)}
 
 Action type: {payload.action_type}
-Example format: {action_examples.get(payload.action_type, '{}')}
+Example format: {action_examples.get(payload.action_type, "{}")}
 
 Requirements:
 - Return ONLY valid JSON, no other text
@@ -584,6 +636,7 @@ Generate the JSON now:"""
 
         # Try to parse the response as JSON
         import json
+
         try:
             # Clean up response - remove markdown code blocks if present
             cleaned = response.strip()
@@ -595,7 +648,11 @@ Generate the JSON now:"""
             action_json = json.loads(cleaned)
             return {"ok": True, "action_json": action_json, "raw_response": response}
         except json.JSONDecodeError as e:
-            return {"ok": False, "error": f"Failed to parse JSON: {e}", "raw_response": response}
+            return {
+                "ok": False,
+                "error": f"Failed to parse JSON: {e}",
+                "raw_response": response,
+            }
 
     except HTTPException:
         raise
@@ -620,14 +677,19 @@ def force_action(game_id: str, request: Request, payload: ForceActionRequest):
             if engine.runtime.turn_order:
                 player_id = engine.runtime.turn_order[0]
             else:
-                raise HTTPException(status_code=400, detail="No player_id provided and no turn order available")
+                raise HTTPException(
+                    status_code=400,
+                    detail="No player_id provided and no turn order available",
+                )
 
         # 2. Validate player exists and is alive
         player = engine.runtime.get_player(player_id)
         if player is None:
             raise HTTPException(status_code=404, detail=f"Player {player_id} not found")
         if not player.alive:
-            raise HTTPException(status_code=400, detail=f"Player {player_id} is not alive")
+            raise HTTPException(
+                status_code=400, detail=f"Player {player_id} is not alive"
+            )
 
         # 3. Build action from action_type and details
         details = payload.details or {}
@@ -638,45 +700,70 @@ def force_action(game_id: str, request: Request, payload: ForceActionRequest):
             action_type_enum = ActionType(action_type_str)
         except ValueError:
             allowed = ", ".join([t.value for t in ActionType])
-            raise HTTPException(status_code=400, detail=f"Invalid action_type '{action_type_str}'. Allowed: {allowed}")
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid action_type '{action_type_str}'. Allowed: {allowed}",
+            )
 
         # Check if action is legal
         allowed_actions = legal_actions(engine.runtime, player_id)
         if action_type_enum not in allowed_actions:
             raise HTTPException(
                 status_code=400,
-                detail=f"Action '{action_type_str}' is not allowed for player {player_id} in current phase"
+                detail=f"Action '{action_type_str}' is not allowed for player {player_id} in current phase",
             )
 
         # Build action object
         if action_type_enum == ActionType.speak:
             if "body" not in details:
-                raise HTTPException(status_code=400, detail="Missing 'body' field for speak action")
+                raise HTTPException(
+                    status_code=400, detail="Missing 'body' field for speak action"
+                )
             action = SpeakAction(body=str(details["body"]))
         elif action_type_enum == ActionType.question:
             if "to_player_id" not in details or "body" not in details:
-                raise HTTPException(status_code=400, detail="Missing 'to_player_id' or 'body' field for question action")
-            action = QuestionAction(to_player_id=str(details["to_player_id"]), body=str(details["body"]))
+                raise HTTPException(
+                    status_code=400,
+                    detail="Missing 'to_player_id' or 'body' field for question action",
+                )
+            action = QuestionAction(
+                to_player_id=str(details["to_player_id"]), body=str(details["body"])
+            )
         elif action_type_enum == ActionType.poll:
             if "body" not in details:
-                raise HTTPException(status_code=400, detail="Missing 'body' field for poll action")
+                raise HTTPException(
+                    status_code=400, detail="Missing 'body' field for poll action"
+                )
             action = PollAction(body=str(details["body"]))
         elif action_type_enum == ActionType.vote:
             if "target_player_id" not in details:
-                raise HTTPException(status_code=400, detail="Missing 'target_player_id' field for vote action")
+                raise HTTPException(
+                    status_code=400,
+                    detail="Missing 'target_player_id' field for vote action",
+                )
             action = VoteAction(target_player_id=str(details["target_player_id"]))
         elif action_type_enum == ActionType.kill:
             if "target_player_id" not in details:
-                raise HTTPException(status_code=400, detail="Missing 'target_player_id' field for kill action")
+                raise HTTPException(
+                    status_code=400,
+                    detail="Missing 'target_player_id' field for kill action",
+                )
             action = KillAction(target_player_id=str(details["target_player_id"]))
         elif action_type_enum == ActionType.investigate:
             if "target_player_id" not in details:
-                raise HTTPException(status_code=400, detail="Missing 'target_player_id' field for investigate action")
-            action = InvestigateAction(target_player_id=str(details["target_player_id"]))
+                raise HTTPException(
+                    status_code=400,
+                    detail="Missing 'target_player_id' field for investigate action",
+                )
+            action = InvestigateAction(
+                target_player_id=str(details["target_player_id"])
+            )
         elif action_type_enum == ActionType.pass_turn:
             action = PassAction(note=details.get("note", ""))
         else:
-            raise HTTPException(status_code=400, detail=f"Action type '{action_type_str}' not supported")
+            raise HTTPException(
+                status_code=400, detail=f"Action type '{action_type_str}' not supported"
+            )
 
         # 4. Create ActionResponse
         action_response = ActionResponse(
@@ -701,7 +788,7 @@ def force_action(game_id: str, request: Request, payload: ForceActionRequest):
             game_id,
             player_id,
             action_type_str,
-            len(new_events)
+            len(new_events),
         )
 
         return {
@@ -757,12 +844,14 @@ def get_player_knowledge(game_id: str, player_id: str):
                 "risk": observation.controls.risk,
                 "deception": observation.controls.deception,
                 "verbosity": observation.controls.verbosity,
-            }
+            },
         }
     except HTTPException:
         raise
     except Exception as exc:
-        logger.exception("get_player_knowledge failed game_id=%s player_id=%s", game_id, player_id)
+        logger.exception(
+            "get_player_knowledge failed game_id=%s player_id=%s", game_id, player_id
+        )
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
@@ -784,11 +873,16 @@ def chat_with_player(game_id: str, player_id: str, payload: AIChatRequest):
         # Get agent
         agent = agents.get(player_id)
         if agent is None:
-            raise HTTPException(status_code=404, detail=f"Agent for player {player_id} not found")
+            raise HTTPException(
+                status_code=404, detail=f"Agent for player {player_id} not found"
+            )
 
         # Verify agent is an LLMAgent
         if not isinstance(agent, LLMAgent):
-            raise HTTPException(status_code=400, detail=f"Player {player_id} is not an LLM agent (cannot chat)")
+            raise HTTPException(
+                status_code=400,
+                detail=f"Player {player_id} is not an LLM agent (cannot chat)",
+            )
 
         # Get observation for context
         observation = engine.observation_for(player_id)
@@ -797,7 +891,7 @@ def chat_with_player(game_id: str, player_id: str, payload: AIChatRequest):
         response = agent.client.generate_response(
             user_message=payload.message,
             observation=observation,
-            system_prompt=agent.system_prompt
+            system_prompt=agent.system_prompt,
         )
 
         logger.info(
@@ -805,7 +899,7 @@ def chat_with_player(game_id: str, player_id: str, payload: AIChatRequest):
             game_id,
             player_id,
             len(payload.message),
-            len(response)
+            len(response),
         )
 
         return {"ok": True, "response": response}
@@ -813,7 +907,9 @@ def chat_with_player(game_id: str, player_id: str, payload: AIChatRequest):
     except HTTPException:
         raise
     except Exception as exc:
-        logger.exception("chat_with_player failed game_id=%s player_id=%s", game_id, player_id)
+        logger.exception(
+            "chat_with_player failed game_id=%s player_id=%s", game_id, player_id
+        )
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
@@ -826,7 +922,10 @@ def preview_next_action(game_id: str):
 
     agents = _AGENTS.get(game_id)
     if not agents:
-        agents = {p.player_id: ScriptedAgent(seed=idx) for idx, p in enumerate(engine.runtime.public_state.players)}
+        agents = {
+            p.player_id: ScriptedAgent(seed=idx)
+            for idx, p in enumerate(engine.runtime.public_state.players)
+        }
         _AGENTS[game_id] = agents
 
     summary_agent = _SUMMARY_AGENTS.get(game_id)
@@ -847,12 +946,36 @@ def get_game_status(game_id: str):
     if engine is None:
         raise HTTPException(status_code=404, detail="Game not found")
 
-    return {
+    public_state = engine.runtime.public_state
+    response = {
         "ok": True,
         "status": engine.runtime.execution_status.model_dump(),
-        "phase": engine.runtime.public_state.phase.value,
-        "round_num": engine.runtime.public_state.round_num,
+        "phase": public_state.phase.value,
+        "round_num": public_state.round_num,
     }
+
+    # Include vote data during vote phase for real-time display
+    if public_state.phase.value == "vote":
+        # Get current votes and tally
+        current_votes = public_state.current_votes
+        vote_tally: dict[str, int] = {}
+        for target in current_votes.values():
+            vote_tally[target] = vote_tally.get(target, 0) + 1
+
+        # Get alive players for context
+        alive_players = [p.player_id for p in public_state.players if p.alive]
+        total_voters = len(alive_players)
+        votes_cast = len(current_votes)
+
+        response["votes"] = {
+            "current_votes": current_votes,  # voter_id -> target_id
+            "vote_tally": vote_tally,  # target_id -> count
+            "votes_cast": votes_cast,
+            "total_voters": total_voters,
+            "alive_players": alive_players,
+        }
+
+    return response
 
 
 @router.get("/{game_id}/prompts/{request_id}")
@@ -884,7 +1007,10 @@ async def generate_narrator_text(game_id: str, payload: NarratorTextRequest):
 
     summary_agent = _SUMMARY_AGENTS.get(game_id)
     if summary_agent is None:
-        raise HTTPException(status_code=400, detail="No summary agent available. Game must use 'ollama' agent type.")
+        raise HTTPException(
+            status_code=400,
+            detail="No summary agent available. Game must use 'ollama' agent type.",
+        )
 
     try:
         runtime = engine.runtime
@@ -912,7 +1038,9 @@ async def generate_narrator_text(game_id: str, payload: NarratorTextRequest):
                 else "[]"
             )
 
-            narrator_text = summary_agent.summarize(public_state_json, transcript_json, events_json).strip()
+            narrator_text = summary_agent.summarize(
+                public_state_json, transcript_json, events_json
+            ).strip()
             return {"ok": True, "narrator_text": narrator_text}
 
         # Use summary agent to generate context-based text

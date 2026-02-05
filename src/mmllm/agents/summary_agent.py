@@ -11,7 +11,9 @@ class SummaryAgent:
         self.system_prompt = system_prompt
         self.user_prompt = user_prompt
 
-    def summarize(self, public_state_json: str, transcript_json: str, events_json: str) -> str:
+    def summarize(
+        self, public_state_json: str, transcript_json: str, events_json: str
+    ) -> str:
         return self.client.generate_summary(
             public_state_json,
             transcript_json,

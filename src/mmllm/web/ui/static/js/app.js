@@ -22,7 +22,7 @@ import {
   rewindToCursor,
   sendInterject,
 } from './modules/controls.js';
-import { startStatusPolling, stopStatusPolling, updateStatusDisplay } from './modules/status.js';
+import { startStatusPolling, stopStatusPolling, updateStatusDisplay, updateVoteDisplay } from './modules/status.js';
 
 (() => {
   // Element references
@@ -520,9 +520,9 @@ import { startStatusPolling, stopStatusPolling, updateStatusDisplay } from './mo
   if (refreshButton && window.location.pathname.startsWith("/game/")) {
     doRefreshGame(false);
 
-    // Start status polling for game page
+    // Start status polling for game page (with vote display enabled)
     const gameId = window.location.pathname.split("/").pop();
-    startStatusPolling(gameId, updateStatusDisplay);
+    startStatusPolling(gameId, updateStatusDisplay, true);
   }
 
   if (partyList) {

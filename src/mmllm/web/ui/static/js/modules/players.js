@@ -36,11 +36,21 @@ export const renderPlayers = (players, playersList, turnIndicator, interjectTarg
     });
   }
 
-  players.forEach((player) => {
+  // Sort players: alive first, then eliminated
+  const sortedPlayers = [...players].sort((a, b) => {
+    if (a.alive === b.alive) return 0;
+    return a.alive ? -1 : 1;
+  });
+
+  sortedPlayers.forEach((player) => {
     const card = document.createElement("div");
     card.className = "player-card";
     if (actorId && actorId === player.player_id) {
       card.classList.add("active");
+    }
+    // Add eliminated class for styling
+    if (!player.alive) {
+      card.classList.add("eliminated");
     }
 
     const left = document.createElement("div");

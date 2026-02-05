@@ -85,7 +85,10 @@ def legal_actions(runtime: GameRuntime, player_id: str) -> List[ActionType]:
         return []
 
     # Special case: responding to a pending question
-    if runtime.pending_question_to == player_id and runtime.public_state.phase == Phase.day:
+    if (
+        runtime.pending_question_to == player_id
+        and runtime.public_state.phase == Phase.day
+    ):
         return [ActionType.speak, ActionType.pass_turn]
 
     phase = runtime.public_state.phase

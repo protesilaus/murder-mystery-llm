@@ -2,6 +2,10 @@
 
 from pathlib import Path
 import shutil
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse

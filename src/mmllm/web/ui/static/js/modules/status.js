@@ -4,7 +4,7 @@
 
 let statusPollInterval = null;
 
-export function startStatusPolling(gameId, statusUpdateCallback) {
+export function startStatusPolling(gameId, statusUpdateCallback, voteUpdateCallback) {
   stopStatusPolling();
 
   const pollStatus = async () => {
@@ -15,6 +15,10 @@ export function startStatusPolling(gameId, statusUpdateCallback) {
       const payload = await response.json();
       if (payload.ok && payload.status) {
         statusUpdateCallback(payload.status);
+      }
+      // Handle vote data if present
+      if (payload.ok && voteUpdateCallback) {
+        updateVoteDisplay(payload.phase, payload.votes);
       }
     } catch (error) {
       console.error("Status polling error:", error);
@@ -157,3 +161,67 @@ window.closePromptModal = function() {
   const modal = document.getElementById("prompt-modal");
   if (modal) modal.remove();
 };
+
+/**
+ * Update the real-time vote display
+ */
+export function updateVoteDisplay(phase, voteData) {
+  const voteSection = document.getElementById("vote-display-section");
+  const voteProgress = document.getElementById("vote-progress");
+  const voteTally = document.getElementById("vote-tally");
+  const voteDetails = document.getElementById("vote-details");
+
+  if (!voteSection) return;
+
+  // Only show during vote phase
+  if (phase !== "vote" || !voteData) {
+    voteSection.style.display = "none";
+    return;
+  }
+
+  voteSection.style.display = "block";
+
+  // Update progress (votes cast / total voters)
+  if (voteProgress) {
+    voteProgress.textContent = `${voteData.votes_cast}/${voteData.total_voters}`;
+  }
+
+  // Build tally display
+  if (voteTally) {
+    const tallyEntries = Object.entries(voteData.vote_tally || {});
+
+    // Find max votes for highlighting leader
+    const maxVotes = tallyEntries.length > 0
+      ? Math.max(...tallyEntries.map(([_, count]) => count))
+      : 0;
+
+    // Sort by vote count descending
+    tallyEntries.sort((a, b) => b[1] - a[1]);
+
+    const tallyHtml = tallyEntries.map(([target, count]) => {
+      const isLeading = count === maxVotes && count > 0;
+      return `
+        <div class="vote-tally-item ${isLeading ? 'leading' : ''}">
+          <span class="target">${target}</span>
+          <span class="count">${count}</span>
+        </div>
+      `;
+    }).join("");
+
+    voteTally.innerHTML = tallyHtml || '<span class="no-votes">No votes yet</span>';
+  }
+
+  // Build vote details (who voted for whom)
+  if (voteDetails) {
+    const currentVotes = voteData.current_votes || {};
+    const voteArrows = Object.entries(currentVotes).map(([voter, target]) => `
+      <span class="vote-arrow">
+        <span class="voter">${voter}</span>
+        <span class="arrow">→</span>
+        <span class="target">${target}</span>
+      </span>
+    `).join("");
+
+    voteDetails.innerHTML = voteArrows || '<span class="no-votes">Waiting for votes...</span>';
+  }
+}

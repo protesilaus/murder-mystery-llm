@@ -3,20 +3,25 @@
 from __future__ import annotations
 
 import json
-import re
-from typing import Any, Dict, List
-from urllib.error import URLError
-from urllib.request import Request, urlopen
+from typing import List
 
 from fastapi import APIRouter, Body
 from pydantic import BaseModel, Field
 
-from mmllm.data.party_config import load_party_config, load_party_defaults, save_party_config
-from mmllm.llm.prompt_builder import build_party_name_messages, load_game_config, load_prompt_templates
+from mmllm.core.http import post_json
+from mmllm.core.utils import CODE_FENCE_RE, normalize_player_id
+from mmllm.data.party_config import (
+    load_party_config,
+    load_party_defaults,
+    save_party_config,
+)
+from mmllm.llm.prompt_builder import (
+    build_party_name_messages,
+    load_game_config,
+    load_prompt_templates,
+)
 
 router = APIRouter()
-
-_CODE_FENCE_RE = re.compile(r"```(?:json)?\s*(.*?)```", re.DOTALL)
 
 
 class PartyPlayer(BaseModel):
@@ -61,7 +66,7 @@ def generate_party_names(payload: PartyGenerateRequest = Body(...)):
     config = load_game_config()
     data = load_party_config(player_count=config.player_count)
     players = data.get("party", {}).get("players", [])
-    player_ids = [str(p.get("player_id", "")).strip().lower() for p in players]
+    player_ids = [normalize_player_id(str(p.get("player_id", ""))) for p in players]
     player_ids = [pid for pid in player_ids if pid]
     templates = load_prompt_templates()
     messages = build_party_name_messages(
@@ -71,7 +76,7 @@ def generate_party_names(payload: PartyGenerateRequest = Body(...)):
     )
 
     body = {"model": payload.model, "stream": False, "messages": messages}
-    response = _post_json(f"{payload.base_url.rstrip('/')}/api/chat", body)
+    response = post_json(f"{payload.base_url.rstrip('/')}/api/chat", body)
     content = response.get("message", {}).get("content", "")
     names = _parse_names(content, len(player_ids))
 
@@ -80,8 +85,8 @@ def generate_party_names(payload: PartyGenerateRequest = Body(...)):
         name = names[idx] if idx < len(names) else player.get("display_name", "")
         updated.append(
             {
-                "player_id": player.get("player_id", f"p{idx+1}"),
-                "display_name": name or f"Agent {idx+1}",
+                "player_id": player.get("player_id", f"p{idx + 1}"),
+                "display_name": name or f"Agent {idx + 1}",
                 "character_name": player.get("character_name", ""),
                 "score": player.get("score", 0),
             }
@@ -91,19 +96,9 @@ def generate_party_names(payload: PartyGenerateRequest = Body(...)):
     return {"ok": True, "players": updated}
 
 
-def _post_json(url: str, payload: Dict[str, Any]) -> Dict[str, Any]:
-    data = json.dumps(payload).encode("utf-8")
-    req = Request(url, data=data, headers={"Content-Type": "application/json"})
-    try:
-        with urlopen(req, timeout=30) as resp:
-            return json.loads(resp.read().decode("utf-8"))
-    except URLError as exc:
-        raise RuntimeError(f"Ollama request failed: {exc}") from exc
-
-
 def _parse_names(content: str, count: int) -> List[str]:
     text = content.strip()
-    match = _CODE_FENCE_RE.search(text)
+    match = CODE_FENCE_RE.search(text)
     if match:
         text = match.group(1).strip()
 
@@ -117,5 +112,5 @@ def _parse_names(content: str, count: int) -> List[str]:
 
     if len(names) < count:
         for idx in range(len(names), count):
-            names.append(f"Agent {idx+1}")
+            names.append(f"Agent {idx + 1}")
     return names[:count]

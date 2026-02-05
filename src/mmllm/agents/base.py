@@ -11,7 +11,9 @@ class Agent(ABC):
     """Base agent interface."""
 
     @abstractmethod
-    def observe(self, observation: AgentObservation) -> None:  # pragma: no cover - interface only
+    def observe(
+        self, observation: AgentObservation
+    ) -> None:  # pragma: no cover - interface only
         raise NotImplementedError
 
     @abstractmethod

@@ -19,56 +19,56 @@ def get_personality_descriptors(controls: Controls) -> dict[str, str]:
     # Assertiveness
     agg = controls.assertiveness
     if agg < 0.3:
-        descriptors['assertiveness_desc'] = "Diplomatic and non-confrontational"
+        descriptors["assertiveness_desc"] = "Diplomatic and non-confrontational"
     elif agg < 0.7:
-        descriptors['assertiveness_desc'] = "Assertive when needed"
+        descriptors["assertiveness_desc"] = "Assertive when needed"
     else:
-        descriptors['assertiveness_desc'] = "Highly confrontational and direct"
+        descriptors["assertiveness_desc"] = "Highly confrontational and direct"
 
     # Skepticism
     skep = controls.skepticism
     if skep < 0.3:
-        descriptors['skepticism_desc'] = "Trusting until given reason not to be"
+        descriptors["skepticism_desc"] = "Trusting until given reason not to be"
     elif skep < 0.7:
-        descriptors['skepticism_desc'] = "Neutral stance, prove yourself trustworthy"
+        descriptors["skepticism_desc"] = "Neutral stance, prove yourself trustworthy"
     else:
-        descriptors['skepticism_desc'] = "Highly suspicious of everyone initially"
+        descriptors["skepticism_desc"] = "Highly suspicious of everyone initially"
 
     # Query Rate (how much they ask questions)
     query = controls.query_rate
     if query < 0.3:
-        descriptors['query_rate_desc'] = "Rarely asks questions, makes statements"
+        descriptors["query_rate_desc"] = "Rarely asks questions, makes statements"
     elif query < 0.7:
-        descriptors['query_rate_desc'] = "Balances questions and statements"
+        descriptors["query_rate_desc"] = "Balances questions and statements"
     else:
-        descriptors['query_rate_desc'] = "Frequently asks questions to probe others"
+        descriptors["query_rate_desc"] = "Frequently asks questions to probe others"
 
     # Risk Tolerance
     risk = controls.risk
     if risk < 0.3:
-        descriptors['risk_desc'] = "Very cautious and evidence-driven"
+        descriptors["risk_desc"] = "Very cautious and evidence-driven"
     elif risk < 0.7:
-        descriptors['risk_desc'] = "Balanced risk assessment"
+        descriptors["risk_desc"] = "Balanced risk assessment"
     else:
-        descriptors['risk_desc'] = "Bold and willing to make risky plays"
+        descriptors["risk_desc"] = "Bold and willing to make risky plays"
 
     # Deception (willingness to lie/mislead)
     dec = controls.deception
     if dec < 0.3:
-        descriptors['deception_desc'] = "Honest and straightforward"
+        descriptors["deception_desc"] = "Honest and straightforward"
     elif dec < 0.7:
-        descriptors['deception_desc'] = "Strategic with information"
+        descriptors["deception_desc"] = "Strategic with information"
     else:
-        descriptors['deception_desc'] = "Comfortable with misdirection and bluffing"
+        descriptors["deception_desc"] = "Comfortable with misdirection and bluffing"
 
     # Verbosity
     verb = controls.verbosity
     if verb < 0.3:
-        descriptors['verbosity_desc'] = "Concise communicator (1-2 sentences typical)"
+        descriptors["verbosity_desc"] = "Concise communicator (1-2 sentences typical)"
     elif verb < 0.7:
-        descriptors['verbosity_desc'] = "Moderate speaker (2-3 sentences typical)"
+        descriptors["verbosity_desc"] = "Moderate speaker (2-3 sentences typical)"
     else:
-        descriptors['verbosity_desc'] = "Verbose explainer (3-5 sentences typical)"
+        descriptors["verbosity_desc"] = "Verbose explainer (3-5 sentences typical)"
 
     return descriptors
 
